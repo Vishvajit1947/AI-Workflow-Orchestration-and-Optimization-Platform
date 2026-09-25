@@ -1,0 +1,62 @@
+# ============================================
+# AI Workflow Orchestration Platform - .gitignore
+# ============================================
+
+# ---------- Python ----------
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.venv/
+venv/
+env/
+*.egg-info/
+*.egg
+dist/
+build/
+.pytest_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+*.so
+
+# ---------- Node / Frontend ----------
+node_modules/
+frontend/dist/
+frontend/.vite/
+*.tsbuildinfo
+
+# ---------- Environment / Secrets ----------
+.env
+.env.local
+.env.*.local
+*.local
+
+# ---------- Database ----------
+*.db
+*.sqlite3
+
+# ---------- Docker ----------
+docker-compose.override.yml
+
+# ---------- IDE / Editor ----------
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# ---------- Logs ----------
+*.log
+logs/
+
+# ---------- Project-specific ----------
+# PBL reference PDF (large, not part of app source)
+PBL Project Planning for Sem-5.pdf
+
+# Model artifacts that are too large (if any exceed GitHub limits)
+# Small model files (model.pkl < 50MB, feature_meta.json, profiles.json) ARE committed.
+# Uncomment the line below only if model.pkl exceeds 50 MB:
+# backend/app/ml/model.pkl
