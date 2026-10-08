@@ -1,0 +1,27 @@
+# ---------- Backend production image ----------
+# Build context: ./backend. Code lives at /app/backend so `backend.app...` imports resolve.
+FROM python:3.11-slim
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1
+
+WORKDIR /app
+
+RUN apt-get update && apt-get install -y --no-install-recommends gcc libpq-dev curl \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY requirements.txt /app/backend/requirements.txt
+RUN pip install --upgrade pip && pip install -r /app/backend/requirements.txt
+
+COPY . /app/backend
+RUN useradd --create-home appuser && chown -R appuser /app
+USER appuser
+
+EXPOSE 8000
+HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
+    CMD curl -fsS http://localhost:8000/health || exit 1
+
+# Apply migrations, then serve. ONE worker on purpose: live execution state
+# (pause/resume/cancel, WebSocket status) is held in-process.
+CMD ["sh", "-c", "cd /app/backend && alembic upgrade head && cd /app && exec uvicorn backend.app.main:app --host 0.0.0.0 --port 8000 --workers 1 --proxy-headers --forwarded-allow-ips='*'"]

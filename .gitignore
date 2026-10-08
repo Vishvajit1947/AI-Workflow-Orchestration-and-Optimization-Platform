@@ -10,6 +10,8 @@ __pycache__/
 .venv/
 venv/
 env/
+backend/venv/
+backend/venv-py314-backup/
 *.egg-info/
 *.egg
 dist/
@@ -24,12 +26,13 @@ htmlcov/
 node_modules/
 frontend/dist/
 frontend/.vite/
+.next/
 *.tsbuildinfo
 
 # ---------- Environment / Secrets ----------
 .env
-.env.local
-.env.*.local
+.env.*
+!.env.example
 *.local
 
 # ---------- Database ----------
@@ -48,9 +51,17 @@ docker-compose.override.yml
 .DS_Store
 Thumbs.db
 
-# ---------- Logs ----------
+# ---------- Logs / temporary files ----------
 *.log
 logs/
+*.tmp
+*.temp
+tmp/
+
+# ---------- Backups / archives ----------
+*.bak
+*.orig
+*.zip
 
 # ---------- Project-specific ----------
 # PBL reference PDF (large, not part of app source)
