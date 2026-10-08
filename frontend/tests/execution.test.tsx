@@ -259,16 +259,18 @@ describe('ExecutionResults', () => {
     render(<ExecutionResults execution={mockExecution} />);
 
     // Look for stage numbering
-    expect(screen.getByText(/#1/)).toBeInTheDocument();
-    expect(screen.getByText(/#2/)).toBeInTheDocument();
+    expect(screen.getByText('Stage 1')).toBeInTheDocument();
+    expect(screen.getByText('Stage 2')).toBeInTheDocument();
   });
 
   it('shows model information for each stage', () => {
     render(<ExecutionResults execution={mockExecution} />);
 
-    // Both stages use gpt-4o-mini
-    const modelLabels = screen.getAllByText('gpt-4o-mini');
-    expect(modelLabels.length).toBeGreaterThan(0);
+    // Both stages use gpt-4o-mini: shown by display name, provider separately, raw id kept as tooltip
+    const modelLabels = screen.getAllByText('GPT-4o Mini');
+    expect(modelLabels).toHaveLength(2);
+    expect(screen.getAllByText('via OpenAI')).toHaveLength(2);
+    expect(modelLabels[0].closest('[title]')).toHaveAttribute('title', 'gpt-4o-mini');
   });
 
   it('renders failed execution correctly', () => {

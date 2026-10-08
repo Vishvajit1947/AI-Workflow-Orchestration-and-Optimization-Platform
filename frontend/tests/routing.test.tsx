@@ -247,9 +247,8 @@ describe('ExecutionResults routing badges', () => {
 
   it('labels each stage by how its model was chosen', () => {
     render(<ExecutionResults execution={execution} />);
-    expect(screen.getByText('Routed')).toBeInTheDocument();
-    expect(screen.getByText('Override')).toBeInTheDocument();
-    expect(screen.getByText('Fallback')).toBeInTheDocument();
+    const chips = screen.getAllByTestId('routing-chip').map((chip) => chip.textContent);
+    expect(chips).toEqual(['Routed', 'Override', 'Fallback']); // none for the cached stage
     expect(screen.getByText('Routing: balanced priority for analysis')).toBeInTheDocument();
     expect(screen.getAllByText('(openai)')).toHaveLength(3); // provider shown except for cache hits
   });

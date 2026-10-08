@@ -259,29 +259,32 @@ describe('ExecutionResults cache indicators', () => {
   it('shows a Cache Hit badge only on cached stages', () => {
     render(<ExecutionResults execution={execution} />);
 
-    const cachedCard = screen.getByText('Design').closest('div.border')! as HTMLElement;
-    const freshCard = screen.getByText('Analyze').closest('div.border')! as HTMLElement;
-    expect(within(cachedCard).getByText('Cache Hit')).toBeInTheDocument();
-    expect(within(freshCard).queryByText('Cache Hit')).not.toBeInTheDocument();
+    const cachedCard = screen.getByText('Design').closest('[data-testid="stage-result"]')! as HTMLElement;
+    const freshCard = screen.getByText('Analyze').closest('[data-testid="stage-result"]')! as HTMLElement;
+    expect(within(cachedCard).getByText('▣ Cache Hit')).toBeInTheDocument();
+    expect(within(freshCard).queryByText(/Cache Hit/)).not.toBeInTheDocument();
   });
 
   it('shows instant, zero-cost results with savings for cached stages', () => {
     render(<ExecutionResults execution={execution} />);
-    const cachedCard = screen.getByText('Design').closest('div.border')! as HTMLElement;
+    const cachedCard = screen.getByText('Design').closest('[data-testid="stage-result"]')! as HTMLElement;
 
-    expect(within(cachedCard).getByText('0ms (instant)')).toBeInTheDocument();
-    expect(within(cachedCard).getByText('Cached Model:')).toBeInTheDocument();
+    expect(within(within(cachedCard).getByTestId('stage-metrics')).getAllByText('0ms')).toHaveLength(2); // latency + duration
+    expect(within(cachedCard).getByText('instant')).toBeInTheDocument();
+    expect(within(cachedCard).getByText('Cached model')).toBeInTheDocument();
     expect(within(cachedCard).getByText('$0.0000')).toBeInTheDocument();
-    expect(within(cachedCard).getByText('($0.0003 saved)')).toBeInTheDocument();
-    expect(within(cachedCard).getByText('(150 saved)')).toBeInTheDocument();
-    expect(within(cachedCard).getByText(/similarity 97\.34%/)).toBeInTheDocument();
+    expect(within(cachedCard).getByText('$0.0003 saved')).toBeInTheDocument();
+    expect(within(cachedCard).getByText('150 saved')).toBeInTheDocument();
+    expect(within(within(cachedCard).getByTestId('stage-metrics')).getByText('▣ HIT')).toBeInTheDocument();
+    expect(within(cachedCard).getByTestId('cache-status')).toHaveTextContent(/similarity 97\.34%/);
   });
 
   it('formats Decimal strings for uncached stages', () => {
     render(<ExecutionResults execution={execution} />);
-    const freshCard = screen.getByText('Analyze').closest('div.border')! as HTMLElement;
+    const freshCard = screen.getByText('Analyze').closest('[data-testid="stage-result"]')! as HTMLElement;
     expect(within(freshCard).getByText('$0.0001')).toBeInTheDocument();
-    expect(within(freshCard).getByText('Model:')).toBeInTheDocument();
+    expect(within(freshCard).getByText('Model')).toBeInTheDocument();
+    expect(within(within(freshCard).getByTestId('stage-metrics')).getByText('○ MISS')).toBeInTheDocument();
   });
 
   it('shows cache hits and savings in the Metrics tab', () => {

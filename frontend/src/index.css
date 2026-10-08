@@ -40,3 +40,35 @@
   border-color: rgba(62, 207, 142, 0.4);
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
 }
+
+/* Syntax highlighting for Markdown code blocks (highlight.js token classes, restrained palette) */
+.md-code .hljs { color: #e4e4e7; background: transparent; }
+.md-code .hljs-comment,
+.md-code .hljs-quote { color: #71717a; font-style: italic; }
+.md-code .hljs-keyword,
+.md-code .hljs-selector-tag,
+.md-code .hljs-built_in,
+.md-code .hljs-meta .hljs-keyword { color: #c4b5fd; }
+.md-code .hljs-string,
+.md-code .hljs-regexp,
+.md-code .hljs-addition,
+.md-code .hljs-meta .hljs-string { color: #86efac; }
+.md-code .hljs-number,
+.md-code .hljs-literal,
+.md-code .hljs-symbol,
+.md-code .hljs-bullet { color: #fdba74; }
+.md-code .hljs-title,
+.md-code .hljs-title.function_,
+.md-code .hljs-section { color: #93c5fd; }
+.md-code .hljs-title.class_,
+.md-code .hljs-type { color: #fcd34d; }
+.md-code .hljs-attr,
+.md-code .hljs-attribute,
+.md-code .hljs-variable,
+.md-code .hljs-template-variable,
+.md-code .hljs-params { color: #7dd3fc; }
+.md-code .hljs-meta,
+.md-code .hljs-doctag { color: #a1a1aa; }
+.md-code .hljs-deletion { color: #fca5a5; }
+.md-code .hljs-emphasis { font-style: italic; }
+.md-code .hljs-strong { font-weight: 600; }

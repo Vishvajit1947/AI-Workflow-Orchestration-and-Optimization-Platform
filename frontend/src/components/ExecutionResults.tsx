@@ -2,12 +2,10 @@
  * Tabbed interface for viewing execution results.
  */
 import React, { useState } from 'react';
-import { Database, GitFork } from 'lucide-react';
+import { Database } from 'lucide-react';
 import type { ExecutionDetailResponse, StageExecutionDetail } from '../types/execution';
 import { ExecutionTimelineView } from './charts/TimelineChart';
-
-// Decimal fields arrive as strings from the API
-const usd = (value: number | string | null | undefined) => `$${Number(value ?? 0).toFixed(4)}`;
+import { StageResult, usd } from './results/StageResult';
 
 const CacheHitBadge: React.FC = () => (
   <span className="px-2 py-1 bg-primary-500/15 text-primary-400 rounded text-xs font-medium flex items-center gap-1">
@@ -15,24 +13,6 @@ const CacheHitBadge: React.FC = () => (
     Cache Hit
   </span>
 );
-
-const RoutingBadge: React.FC<{ stage: StageExecutionDetail }> = ({ stage }) => {
-  if (stage.cache_hit || !stage.routing_reason) return null;
-  const [label, color] = stage.was_user_override
-    ? ['Override', 'bg-surface-700/50 text-surface-200/80']
-    : stage.was_fallback
-    ? ['Fallback', 'bg-amber-500/15 text-amber-300']
-    : ['Routed', 'bg-surface-700/50 text-surface-200/80'];
-  return (
-    <span
-      title={stage.routing_reason}
-      className={`px-2 py-1 rounded text-xs font-medium flex items-center gap-1 ${color}`}
-    >
-      <GitFork size={12} />
-      {label}
-    </span>
-  );
-};
 
 interface ExecutionResultsProps {
   execution: ExecutionDetailResponse;
@@ -106,95 +86,13 @@ export const ExecutionResults: React.FC<ExecutionResultsProps> = ({ execution })
 };
 
 // --- Stage Results Tab ---
-const StagesTab: React.FC<{ stages: StageExecutionDetail[] }> = ({ stages }) => {
-  return (
-    <div className="space-y-4">
-      {stages.map((stage) => (
-        <div key={stage.id} className="border border-surface-700 rounded-lg p-4">
-          {/* Stage header */}
-          <div className="flex items-center justify-between mb-3">
-            <div className="flex items-center gap-3">
-              <span className="text-sm font-medium text-surface-200/50">#{stage.stage_order + 1}</span>
-              <h3 className="text-lg font-semibold">{stage.stage_name}</h3>
-              <span
-                className={`px-2 py-1 rounded text-xs font-medium ${
-                  STATUS_COLORS[stage.status]
-                }`}
-              >
-                {stage.status}
-              </span>
-              {stage.cache_hit && <CacheHitBadge />}
-              <RoutingBadge stage={stage} />
-            </div>
-            <div className="text-sm text-surface-200/60">
-              {stage.duration_ms !== null && `${stage.duration_ms}ms`}
-              {stage.cache_hit && ' (instant)'}
-            </div>
-          </div>
-
-          {/* Stage metadata */}
-          <div className="grid grid-cols-4 gap-4 mb-3 text-sm">
-            <div>
-              <span className="text-surface-200/50">{stage.cache_hit ? 'Cached Model:' : 'Model:'}</span>{' '}
-              <span className="font-medium">{stage.model_used || 'N/A'}</span>
-              {stage.provider && stage.provider !== 'cache' && (
-                <span className="text-xs text-surface-200/40 ml-1">({stage.provider})</span>
-              )}
-            </div>
-            <div>
-              <span className="text-surface-200/50">Tokens:</span>{' '}
-              <span className="font-medium">{stage.total_tokens.toLocaleString()}</span>
-              {stage.cache_hit && stage.tokens_saved != null && (
-                <span className="text-primary-400 text-xs ml-1">
-                  ({stage.tokens_saved.toLocaleString()} saved)
-                </span>
-              )}
-            </div>
-            <div>
-              <span className="text-surface-200/50">Latency:</span>{' '}
-              <span className="font-medium">{stage.latency_ms || 0}ms</span>
-            </div>
-            <div>
-              <span className="text-surface-200/50">Cost:</span>{' '}
-              <span className="font-medium">{usd(stage.estimated_cost)}</span>
-              {stage.cache_hit && stage.cost_saved != null && (
-                <span className="text-primary-400 text-xs ml-1">({usd(stage.cost_saved)} saved)</span>
-              )}
-            </div>
-          </div>
-          {stage.cache_hit && stage.cache_similarity != null && (
-            <p className="text-xs text-primary-400 mb-3">
-              Served from semantic cache · similarity {(stage.cache_similarity * 100).toFixed(2)}%
-            </p>
-          )}
-          {!stage.cache_hit && stage.routing_reason && (
-            <p className="text-xs text-surface-200/50 mb-3">{stage.routing_reason}</p>
-          )}
-          {(stage.retry_count ?? 0) > 0 && (
-            <p className="text-xs text-amber-300 mb-3">
-              {stage.retry_count} failed attempt{stage.retry_count === 1 ? '' : 's'}
-              {stage.fallback_from && ` · fell back from ${stage.fallback_from}`}
-            </p>
-          )}
-
-          {/* Result or error */}
-          {stage.status === 'completed' && stage.result && (
-            <div className="bg-surface-900/60 rounded p-3">
-              <p className="text-sm font-medium text-surface-200/80 mb-2">Output:</p>
-              <p className="text-sm text-surface-200 whitespace-pre-wrap">{stage.result}</p>
-            </div>
-          )}
-          {stage.status === 'failed' && stage.error_message && (
-            <div className="bg-red-500/10 border border-red-500/30 rounded p-3">
-              <p className="text-sm font-medium text-red-300 mb-2">Error:</p>
-              <p className="text-sm text-red-400">{stage.error_message}</p>
-            </div>
-          )}
-        </div>
-      ))}
-    </div>
-  );
-};
+const StagesTab: React.FC<{ stages: StageExecutionDetail[] }> = ({ stages }) => (
+  <div className="space-y-5">
+    {stages.map((stage) => (
+      <StageResult key={stage.id} stage={stage} />
+    ))}
+  </div>
+);
 
 // --- Context Flow Tab ---
 const ContextTab: React.FC<{ stages: StageExecutionDetail[] }> = ({ stages }) => {
