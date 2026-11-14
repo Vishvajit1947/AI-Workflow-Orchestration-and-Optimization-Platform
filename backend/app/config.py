@@ -65,6 +65,25 @@ class Settings(BaseSettings):
     CIRCUIT_BREAKER_TIMEOUT: int = 60           # seconds before an open circuit lets a trial call through
     MAX_PARALLEL_STAGES: int = 4                # concurrent stages per execution
 
+    # ---------- Authentication ----------
+    SESSION_SECRET_KEY: str = "change-me-in-production"
+    SESSION_EXPIRE_DAYS: int = 7
+    REQUIRE_EMAIL_VERIFICATION: bool = True
+    PASSWORD_MIN_LENGTH: int = 12
+    PASSWORD_RESET_EXPIRE_MINUTES: int = 60
+    EMAIL_VERIFICATION_EXPIRE_HOURS: int = 24
+
+    # ---------- SMTP (Email) ----------
+    SMTP_HOST: str = "localhost"
+    SMTP_PORT: int = 587
+    SMTP_USER: Optional[str] = None
+    SMTP_PASSWORD: Optional[str] = None
+    SMTP_FROM_EMAIL: str = "noreply@example.com"
+    SMTP_FROM_NAME: str = "AI Orchestrator"
+
+    # ---------- Frontend URL ----------
+    FRONTEND_URL: str = "http://localhost:5173"
+
 
 # Singleton instance — import this everywhere
 settings = Settings()

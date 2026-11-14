@@ -41,6 +41,30 @@ export interface StageExecutionDetail {
   was_fallback?: boolean;
   retry_count?: number;                  // Failed LLM attempts before the result
   fallback_from?: string | null;         // provider/model that failed before the fallback answered
+  artifact?: Artifact | null;            // Files/document built from `result`; null = plain text output
+}
+
+// ---------- Output artifacts ----------
+
+export type ArtifactType = 'explanation' | 'document' | 'code' | 'project' | 'structured';
+
+export interface ArtifactFile {
+  path: string;      // relative, validated by the backend: "src/main.py"
+  content: string;
+  language: string;  // "python", "tsx", "text", ...
+}
+
+export interface ArtifactConflict {
+  path: string;
+  kept_from: string;
+  overridden_from: string;
+}
+
+export interface Artifact {
+  artifact_type: ArtifactType;
+  name: string;
+  files: ArtifactFile[];
+  conflicts: ArtifactConflict[];
 }
 
 export interface ExecutionSummary {
@@ -62,6 +86,7 @@ export interface ExecutionSummary {
 export interface ExecutionDetailResponse {
   summary: ExecutionSummary;
   stages: StageExecutionDetail[];
+  artifact?: Artifact | null;  // Project combining files from several stages
 }
 
 export interface ExecutionStartResponse {

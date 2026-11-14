@@ -211,9 +211,9 @@ describe('ExecutionConfigModal routing', () => {
     expect(onExecute).toHaveBeenCalledWith(expect.objectContaining({ use_routing: false, routing_preferences: {} }));
   });
 
-  it('does not call the API without stages', () => {
+  it('loads the registry for provider choices but skips the routing preview without stages', () => {
     render(<ExecutionConfigModal isOpen onClose={vi.fn()} onExecute={vi.fn()} workflowName="WF" />);
-    expect(models.listModels).not.toHaveBeenCalled();
+    expect(models.listModels).toHaveBeenCalled();
     expect(routing.preview).not.toHaveBeenCalled();
   });
 });

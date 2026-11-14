@@ -15,6 +15,7 @@ const api = axios.create({
   baseURL: `${API_BASE_URL}/api`,
   headers: { 'Content-Type': 'application/json' },
   timeout: 30000,
+  withCredentials: true, // Include cookies in requests
 });
 
 // Response interceptor for error handling
@@ -22,6 +23,12 @@ api.interceptors.response.use(
   (response) => response,
   (error) => {
     console.error('API Error:', error.response?.data || error.message);
+
+    // Redirect to login on 401 Unauthorized (except if already on login page)
+    if (error.response?.status === 401 && !window.location.pathname.startsWith('/login')) {
+      window.location.href = '/login';
+    }
+
     return Promise.reject(error);
   }
 );

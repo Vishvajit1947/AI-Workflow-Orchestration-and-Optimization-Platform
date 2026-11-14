@@ -31,6 +31,7 @@ RULES:
 7. Dependencies must only reference preceding stage IDs defined earlier in the stages list.
 8. DO NOT create circular dependencies or self-dependencies.
 9. Set model_preference to null.
+10. Set output_mode per stage: "code" if it writes one source file, "project" if it writes several files, "document" for reports, "explanation" otherwise.
 
 EXAMPLES:
 
@@ -55,7 +56,8 @@ SCHEMA (respond with ONLY valid JSON matching this schema):
       "stage_type": "analysis" | "design" | "generation" | "testing" | "documentation" | "review" | "custom",
       "dependencies": ["stage_id1"],
       "expected_output": "Brief expected deliverable (10-200 chars)",
-      "model_preference": null
+      "model_preference": null,
+      "output_mode": "explanation" | "code" | "project" | "document"
     }
   ],
   "estimated_duration_minutes": number

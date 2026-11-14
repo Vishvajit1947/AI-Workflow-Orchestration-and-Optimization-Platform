@@ -130,6 +130,7 @@ async def generate_workflow_from_plan(
                 "description": stage_plan.description,
                 "expected_output": stage_plan.expected_output,
                 "planner_generated": True,
+                **({"output_mode": stage_plan.output_mode} if stage_plan.output_mode else {}),
             },
             dependencies=[],  # Will add after all stages exist
         )

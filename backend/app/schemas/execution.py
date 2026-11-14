@@ -8,6 +8,8 @@ from typing import Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from backend.app.artifacts.schemas import Artifact
+
 
 # Request schemas
 class ExecutionStartRequest(BaseModel):
@@ -61,6 +63,7 @@ class StageExecutionDetail(BaseModel):
     was_fallback: bool = Field(default=False, description="Routing fell back because no candidate met the rule")
     retry_count: int = Field(default=0, description="Failed LLM attempts before the result (or final failure)")
     fallback_from: Optional[str] = Field(default=None, description="provider/model that failed before the fallback model answered")
+    artifact: Optional[Artifact] = Field(default=None, description="Files/document built from `result`; null means plain text output")
 
 
 class ExecutionSummary(BaseModel):
@@ -84,6 +87,7 @@ class ExecutionDetailResponse(BaseModel):
     """Full execution details with all stages."""
     summary: ExecutionSummary
     stages: list[StageExecutionDetail]
+    artifact: Optional[Artifact] = Field(default=None, description="Project combining the files of several stages, if any")
 
 
 class ExecutionStartResponse(BaseModel):

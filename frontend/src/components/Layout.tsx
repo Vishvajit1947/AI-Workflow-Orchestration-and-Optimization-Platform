@@ -1,7 +1,8 @@
-import { Outlet, NavLink } from 'react-router-dom';
+import { Outlet, NavLink, useNavigate } from 'react-router-dom';
 import {
-  Home, LayoutDashboard, GitBranch, Database, Zap, Cpu
+  Home, LayoutDashboard, GitBranch, Database, Zap, Cpu, LogOut
 } from 'lucide-react';
+import { useAuth } from '../hooks/useAuth';
 
 const navItems = [
   { to: '/', icon: Home, label: 'Create Workflow', exact: true },
@@ -13,6 +14,14 @@ const navItems = [
 ];
 
 export default function Layout() {
+  const { user, logout } = useAuth();
+  const navigate = useNavigate();
+
+  const handleLogout = async () => {
+    await logout();
+    navigate('/login');
+  };
+
   return (
     <div className="flex h-screen overflow-hidden">
       {/* Sidebar */}
@@ -45,6 +54,32 @@ export default function Layout() {
             </NavLink>
           ))}
         </nav>
+
+        {/* User Section */}
+        {user && (
+          <div className="p-4 border-t border-primary-500/10 space-y-3">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-full bg-primary-500 flex items-center justify-center text-white font-bold text-sm">
+                {user.full_name.charAt(0).toUpperCase()}
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium text-white truncate">
+                  {user.full_name}
+                </p>
+                <p className="text-xs text-surface-200/50 truncate">
+                  {user.email}
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={handleLogout}
+              className="w-full flex items-center gap-2 px-3 py-2 text-sm text-surface-200/60 hover:text-white hover:bg-surface-700/50 rounded-lg transition-colors"
+            >
+              <LogOut size={16} />
+              Logout
+            </button>
+          </div>
+        )}
 
         {/* Footer */}
         <div className="p-4 border-t border-primary-500/10">

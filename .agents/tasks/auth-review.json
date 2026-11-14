@@ -1,0 +1,8 @@
+{
+  "verdict": "CHANGES_REQUESTED",
+  "findings": [
+    "Criterion 28: Email template hardcodes '15 minutes' expiry but config default is 60 minutes. Update backend/app/email_templates/password_reset_email.html line 46 to use Jinja2 variable {{ expire_minutes }} and pass from email_service.py using settings.PASSWORD_RESET_EXPIRE_MINUTES.",
+    "Criterion 29: AUTH_SETUP.md documents PASSWORD_RESET_EXPIRE_MINUTES=15 but actual default in config.py and .env.example is 60. Update AUTH_SETUP.md line 45 to match actual default (60 minutes)."
+  ],
+  "reviewDoc": "e:\\PBL AI Orchestrator\\.agents\\tasks\\auth-review.md"
+}

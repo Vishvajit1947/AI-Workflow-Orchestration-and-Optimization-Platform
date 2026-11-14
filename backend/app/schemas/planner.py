@@ -4,8 +4,10 @@ Pydantic schemas for Workflow Planner.
 The planner analyzes user objectives and generates workflow plans.
 """
 
-from typing import Literal, Optional
-from pydantic import BaseModel, Field
+from typing import Literal, Optional, get_args
+from pydantic import BaseModel, Field, field_validator
+
+from backend.app.artifacts.schemas import OutputMode
 
 
 class ObjectiveAnalysisRequest(BaseModel):
@@ -73,6 +75,19 @@ class StagePlan(BaseModel):
         examples=["gpt-4o", "gemini-2.5-pro"],
         description="Optional preferred model for this stage",
     )
+    output_mode: Optional[str] = Field(
+        None,
+        examples=["code", "project", "explanation"],
+        description="Optional output presentation: explanation, document, code, project or structured. "
+                    "Unknown values are ignored so a plan never fails because of this field.",
+    )
+
+    @field_validator("output_mode", mode="before")
+    @classmethod
+    def _known_output_mode(cls, value: object) -> Optional[str]:
+        if isinstance(value, str) and value.strip().lower() in get_args(OutputMode):
+            return value.strip().lower()
+        return None
 
 
 class ObjectiveAnalysisResponse(BaseModel):

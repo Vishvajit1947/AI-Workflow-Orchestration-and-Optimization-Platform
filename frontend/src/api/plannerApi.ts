@@ -19,6 +19,7 @@ export interface StagePlan {
   dependencies: string[];
   expected_output: string;
   model_preference?: string | null;
+  output_mode?: 'explanation' | 'document' | 'code' | 'project' | 'structured' | null;
 }
 
 export interface ObjectiveAnalysisResponse {

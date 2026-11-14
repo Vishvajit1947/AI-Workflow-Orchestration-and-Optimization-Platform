@@ -8,6 +8,9 @@ import type { StageExecutionDetail } from '../../types/execution';
 import { formatDuration } from '../../lib/format';
 import { formatModelName, formatProvider, parseRoutingReason, type RoutingInfo } from '../../lib/resultFormat';
 import { buildOutline, CopyButton, MarkdownRenderer, type OutlineEntry } from './MarkdownRenderer';
+import { ArtifactOutput, DocumentDownloads } from './ArtifactOutput';
+import { executionApi } from '../../api/executionApi';
+import { safeFileStem } from '../../lib/download';
 
 // Decimal fields arrive as strings from the API
 export const usd = (value: number | string | null | undefined) => `$${Number(value ?? 0).toFixed(4)}`;
@@ -262,12 +265,17 @@ const NO_OUTPUT: Partial<Record<StageStatus, string>> = {
   cancelled: 'Cancelled before this stage produced output.',
 };
 
-export const OutputSection: React.FC<{ stage: StageExecutionDetail }> = ({ stage }) => {
+/**
+ * `executionId` enables the server downloads (PDF/TXT, ZIP); without it they are not shown.
+ * A stage without an artifact renders exactly as plain Markdown output.
+ */
+export const OutputSection: React.FC<{ stage: StageExecutionDetail; executionId?: string }> = ({ stage, executionId }) => {
   const idPrefix = `out-${stage.id}`;
   const outline = useMemo(
     () => (stage.result && stage.result.length > LONG_OUTPUT_CHARS ? buildOutline(stage.result, idPrefix) : []),
     [stage.result, idPrefix],
   );
+  const [view, setView] = useState<'files' | 'output'>('files');
 
   if (stage.status === 'failed' && stage.error_message) {
     return (
@@ -282,24 +290,57 @@ export const OutputSection: React.FC<{ stage: StageExecutionDetail }> = ({ stage
   }
 
   const words = stage.result.trim().split(/\s+/).length;
+  const artifact = stage.artifact?.files.length ? stage.artifact : null;
+  const showFiles = artifact !== null && view === 'files';
+  const canDownload = executionId !== undefined && stage.status === 'completed';
+  const tabClass = (active: boolean) =>
+    `rounded-md px-2.5 py-1 text-xs font-medium ${active ? 'bg-surface-700 text-white' : 'text-surface-200/60 hover:text-white'}`;
   return (
     <section aria-label={`${stage.stage_name} output`}>
-      <div className="mb-3 flex items-center justify-between gap-3">
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-baseline gap-2">
           <h4 className="text-xs font-bold uppercase tracking-[0.14em] text-white">Output</h4>
           <span className="text-xs text-surface-200/40">{words.toLocaleString()} words</span>
         </div>
-        <CopyButton text={stage.result} label="Copy output" />
+        <div className="flex items-start gap-2">
+          {canDownload && (
+            <DocumentDownloads
+              baseName={safeFileStem(stage.stage_name)}
+              getDocument={(format) => executionApi.downloadStageDocument(executionId!, stage.stage_id, format)}
+            />
+          )}
+          <CopyButton text={stage.result} label="Copy output" />
+        </div>
       </div>
-      {outline.length > 0 && <OutlineNav entries={outline} />}
-      <MarkdownRenderer content={stage.result} idPrefix={idPrefix} />
+      {artifact && (
+        <div role="group" aria-label="Output view" className="mb-3 inline-flex gap-1 rounded-lg border border-surface-700 p-0.5">
+          <button type="button" aria-pressed={showFiles} onClick={() => setView('files')} className={tabClass(showFiles)}>
+            View generated files ({artifact.files.length})
+          </button>
+          <button type="button" aria-pressed={!showFiles} onClick={() => setView('output')} className={tabClass(!showFiles)}>
+            View full output
+          </button>
+        </div>
+      )}
+      {showFiles ? (
+        <ArtifactOutput
+          artifact={artifact!}
+          getZip={canDownload ? () => executionApi.downloadStageZip(executionId!, stage.stage_id) : undefined}
+          zipName={`${safeFileStem(artifact!.name, 'project')}.zip`}
+        />
+      ) : (
+        <>
+          {outline.length > 0 && <OutlineNav entries={outline} />}
+          <MarkdownRenderer content={stage.result} idPrefix={idPrefix} />
+        </>
+      )}
     </section>
   );
 };
 
 // ---------- composed stage ----------
 
-export const StageResult: React.FC<{ stage: StageExecutionDetail }> = ({ stage }) => {
+export const StageResult: React.FC<{ stage: StageExecutionDetail; executionId?: string }> = ({ stage, executionId }) => {
   const [expanded, setExpanded] = useState(true);
   const routing = useMemo(
     () => (stage.cache_hit ? null : parseRoutingReason(stage.routing_reason, stage)),
@@ -331,7 +372,7 @@ export const StageResult: React.FC<{ stage: StageExecutionDetail }> = ({ stage }
           )}
 
           <div className="border-t-2 border-surface-700 pt-5">
-            <OutputSection stage={stage} />
+            <OutputSection stage={stage} executionId={executionId} />
           </div>
         </div>
       )}

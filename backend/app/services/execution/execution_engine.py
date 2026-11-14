@@ -22,6 +22,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from backend.app.artifacts.prompts import stage_system_prompt
 from backend.app.config import settings
 from backend.app.models.workflow import Workflow
 from backend.app.models.stage import Stage
@@ -40,6 +41,11 @@ from backend.app.services.router.routing_engine import RoutingEngine
 
 SYSTEM_PROMPT = ("You are an AI assistant helping with a multi-stage workflow. "
                  "Provide detailed, actionable output for this stage.")
+
+
+def _system_prompt(stage: Stage) -> str:
+    """SYSTEM_PROMPT, plus the file-output convention for stages configured to produce files."""
+    return stage_system_prompt(SYSTEM_PROMPT, (stage.config or {}).get("output_mode"))
 
 
 class StageFailed(Exception):
@@ -366,7 +372,7 @@ class ExecutionEngine:
         try:
             provider = registry.get(provider_name)
             model = model or provider.get_default_model()
-            response, attempts = await self.error_handler.call(provider, stage_input, model, SYSTEM_PROMPT)
+            response, attempts = await self.error_handler.call(provider, stage_input, model, _system_prompt(stage))
             return response, attempts, None
         except (LLMCallFailed, CircuitOpenError, ValueError) as e:
             attempts = list(getattr(e, "attempts", []))
@@ -387,7 +393,7 @@ class ExecutionEngine:
         await tracker.update_stage(run.execution_id, stage.id, provider=fallback.provider, model=fallback.model_name)
         try:
             response, more = await self.error_handler.call(
-                registry.get(fallback.provider), stage_input, fallback.model_name, SYSTEM_PROMPT
+                registry.get(fallback.provider), stage_input, fallback.model_name, _system_prompt(stage)
             )
         except (LLMCallFailed, CircuitOpenError) as e:
             raise StageFailed(f"{failure}; fallback also failed: {e}",

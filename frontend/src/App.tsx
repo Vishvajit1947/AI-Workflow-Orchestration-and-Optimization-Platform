@@ -1,5 +1,12 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { AuthProvider } from './contexts/AuthContext';
+import ProtectedRoute from './components/ProtectedRoute';
 import Layout from './components/Layout';
+import Login from './pages/Login';
+import Signup from './pages/Signup';
+import ForgotPassword from './pages/ForgotPassword';
+import ResetPassword from './pages/ResetPassword';
+import VerifyEmail from './pages/VerifyEmail';
 import ObjectiveInput from './pages/ObjectiveInput';
 import WorkflowList from './pages/WorkflowList';
 import WorkflowDetail from './pages/WorkflowDetail';
@@ -12,19 +19,31 @@ import ExecutionsPage from './pages/ExecutionsPage';
 function App() {
   return (
     <BrowserRouter>
-      <Routes>
-        <Route path="/" element={<Layout />}>
-          <Route index element={<ObjectiveInput />} />
-          <Route path="dashboard" element={<Dashboard />} />
-          <Route path="workflows" element={<WorkflowList />} />
-          <Route path="workflows/new" element={<WorkflowEditor />} />
-          <Route path="workflows/:id" element={<WorkflowDetail />} />
-          <Route path="workflows/:id/edit" element={<WorkflowEditor />} />
-          <Route path="cache" element={<CacheDashboard />} />
-          <Route path="models" element={<ModelComparison />} />
-          <Route path="executions" element={<ExecutionsPage />} />
-        </Route>
-      </Routes>
+      <AuthProvider>
+        <Routes>
+          {/* Public routes */}
+          <Route path="/login" element={<Login />} />
+          <Route path="/signup" element={<Signup />} />
+          <Route path="/forgot-password" element={<ForgotPassword />} />
+          <Route path="/reset-password" element={<ResetPassword />} />
+          <Route path="/verify-email" element={<VerifyEmail />} />
+
+          {/* Protected routes */}
+          <Route element={<ProtectedRoute />}>
+            <Route path="/" element={<Layout />}>
+              <Route index element={<ObjectiveInput />} />
+              <Route path="dashboard" element={<Dashboard />} />
+              <Route path="workflows" element={<WorkflowList />} />
+              <Route path="workflows/new" element={<WorkflowEditor />} />
+              <Route path="workflows/:id" element={<WorkflowDetail />} />
+              <Route path="workflows/:id/edit" element={<WorkflowEditor />} />
+              <Route path="cache" element={<CacheDashboard />} />
+              <Route path="models" element={<ModelComparison />} />
+              <Route path="executions" element={<ExecutionsPage />} />
+            </Route>
+          </Route>
+        </Routes>
+      </AuthProvider>
     </BrowserRouter>
   );
 }

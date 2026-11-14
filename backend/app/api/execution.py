@@ -11,6 +11,8 @@ from sqlalchemy import select, func, and_, Integer
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from backend.app.artifacts import aggregate_artifacts
+from backend.app.artifacts.service import record_artifact
 from backend.app.database import get_db, get_session_factory
 from backend.app.models.workflow import Workflow
 from backend.app.models.stage import Stage
@@ -190,9 +192,14 @@ async def get_execution_details(
             was_fallback=bool(routing.get("was_fallback")),
             retry_count=len(attempts),
             fallback_from=routing.get("fallback_from"),
+            artifact=record_artifact(record),
         ))
 
-    return ExecutionDetailResponse(summary=summary, stages=stages)
+    # Presentation only: built from the stored results, never written back
+    combined = aggregate_artifacts(
+        [(s.stage_name, s.artifact) for s in sorted(stages, key=lambda s: s.stage_order)], workflow.name
+    )
+    return ExecutionDetailResponse(summary=summary, stages=stages, artifact=combined)
 
 
 @router.get("/executions", response_model=List[ExecutionListItem])

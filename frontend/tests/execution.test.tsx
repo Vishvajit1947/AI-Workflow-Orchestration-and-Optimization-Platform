@@ -6,6 +6,20 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { ExecutionConfigModal } from '../src/components/ExecutionConfigModal';
 import { ExecutionResults } from '../src/components/ExecutionResults';
 import type { ExecutionDetailResponse } from '../src/types/execution';
+import type { ModelProfile } from '../src/types/routing';
+import { modelsApi } from '../src/api/modelsApi';
+
+vi.mock('../src/api/modelsApi', () => ({ modelsApi: { listModels: vi.fn() } }));
+
+// Registry as the backend reports it: Groq and Gemini have API keys, OpenAI does not
+const profile = (provider: string, model_name: string, display_name: string, routable: boolean) =>
+  ({ provider, model_name, display_name, routable, is_available: true }) as ModelProfile;
+const REGISTRY = [
+  profile('groq', 'qwen/qwen3.8-27b', 'Qwen 3.8 27B', true),
+  profile('groq', 'openai/gpt-oss-20b', 'GPT-OSS 20B', true),
+  profile('gemini', 'gemini-3.8-flash', 'Gemini 3.8 Flash', true),
+  profile('openai', 'gpt-4o-mini', 'GPT-4o Mini', false),
+];
 
 describe('ExecutionConfigModal', () => {
   const mockOnExecute = vi.fn();
@@ -14,6 +28,7 @@ describe('ExecutionConfigModal', () => {
   beforeEach(() => {
     mockOnExecute.mockClear();
     mockOnClose.mockClear();
+    vi.mocked(modelsApi.listModels).mockReset().mockResolvedValue(REGISTRY);
   });
 
   it('renders when open', () => {
@@ -43,7 +58,7 @@ describe('ExecutionConfigModal', () => {
     expect(screen.queryByText('Execute Workflow')).not.toBeInTheDocument();
   });
 
-  it('displays provider options', () => {
+  it('lists only providers with a configured API key, by their real names', async () => {
     render(
       <ExecutionConfigModal
         isOpen={true}
@@ -53,10 +68,22 @@ describe('ExecutionConfigModal', () => {
       />
     );
 
-    expect(screen.getByLabelText('Default Provider')).toBeInTheDocument();
-    expect(screen.getByText('OpenAI')).toBeInTheDocument();
-    expect(screen.getByText('Anthropic (Claude)')).toBeInTheDocument();
-    expect(screen.getByText('Google (Gemini)')).toBeInTheDocument();
+    const providerSelect = screen.getByLabelText('Default Provider') as HTMLSelectElement;
+    await waitFor(() =>
+      expect(Array.from(providerSelect.options).map((o) => o.text)).toEqual(['Groq', 'Google Gemini'])
+    );
+    expect(providerSelect.value).toBe('groq');
+    expect(screen.queryByText(/Llama|Claude/)).toBeNull();
+  });
+
+  it('falls back to every provider when the registry cannot be loaded', async () => {
+    vi.mocked(modelsApi.listModels).mockRejectedValue(new Error('offline'));
+    render(
+      <ExecutionConfigModal isOpen onClose={mockOnClose} onExecute={mockOnExecute} workflowName="WF" />
+    );
+    expect(await screen.findByText(/Couldn't load the model registry/)).toBeInTheDocument();
+    const providerSelect = screen.getByLabelText('Default Provider') as HTMLSelectElement;
+    expect(Array.from(providerSelect.options).map((o) => o.text)).toEqual(['Groq', 'Google Gemini', 'OpenAI', 'Anthropic']);
   });
 
   it('calls onExecute with selected config', async () => {
@@ -69,9 +96,10 @@ describe('ExecutionConfigModal', () => {
       />
     );
 
-    // Select Anthropic provider
+    // Select the Gemini provider once the registry has loaded
     const providerSelect = screen.getByLabelText('Default Provider');
-    fireEvent.change(providerSelect, { target: { value: 'anthropic' } });
+    await screen.findByRole('option', { name: 'Google Gemini' });
+    fireEvent.change(providerSelect, { target: { value: 'gemini' } });
 
     // Click execute
     const executeButton = screen.getByRole('button', { name: /execute/i });
@@ -79,7 +107,7 @@ describe('ExecutionConfigModal', () => {
 
     await waitFor(() => {
       expect(mockOnExecute).toHaveBeenCalledWith({
-        default_provider: 'anthropic',
+        default_provider: 'gemini',
         default_model: null,
         use_cache: true,
         use_routing: true,
@@ -105,7 +133,7 @@ describe('ExecutionConfigModal', () => {
     expect(mockOnClose).toHaveBeenCalled();
   });
 
-  it('updates model options when provider changes', () => {
+  it('updates model options when provider changes', async () => {
     render(
       <ExecutionConfigModal
         isOpen={true}
@@ -116,12 +144,20 @@ describe('ExecutionConfigModal', () => {
     );
 
     const providerSelect = screen.getByLabelText('Default Provider');
-    
+    const modelSelect = screen.getByLabelText('Default Model') as HTMLSelectElement;
+    await screen.findByRole('option', { name: 'Qwen 3.8 27B' });
+    expect(Array.from(modelSelect.options).map((o) => o.text)).toEqual(['Provider default', 'GPT-OSS 20B', 'Qwen 3.8 27B']);
+
     // Change to Google (backend provider name "gemini")
     fireEvent.change(providerSelect, { target: { value: 'gemini' } });
-    
-    // Should see Gemini models
-    expect(screen.getByText(/Gemini 2.0 Flash/)).toBeInTheDocument();
+    expect(Array.from(modelSelect.options).map((o) => o.text)).toEqual(['Provider default', 'Gemini 3.8 Flash']);
+
+    // A picked model is sent as the default model
+    fireEvent.change(modelSelect, { target: { value: 'gemini-3.8-flash' } });
+    fireEvent.click(screen.getByRole('button', { name: /execute/i }));
+    expect(mockOnExecute).toHaveBeenCalledWith(
+      expect.objectContaining({ default_provider: 'gemini', default_model: 'gemini-3.8-flash' })
+    );
   });
 });
 

@@ -6,6 +6,10 @@ import { Database } from 'lucide-react';
 import type { ExecutionDetailResponse, StageExecutionDetail } from '../types/execution';
 import { ExecutionTimelineView } from './charts/TimelineChart';
 import { StageResult, usd } from './results/StageResult';
+import { ArtifactOutput } from './results/ArtifactOutput';
+import { executionApi } from '../api/executionApi';
+import { safeFileStem } from '../lib/download';
+import type { Artifact } from '../types/execution';
 
 const CacheHitBadge: React.FC = () => (
   <span className="px-2 py-1 bg-primary-500/15 text-primary-400 rounded text-xs font-medium flex items-center gap-1">
@@ -77,7 +81,9 @@ export const ExecutionResults: React.FC<ExecutionResultsProps> = ({ execution })
       </div>
 
       {/* Tab content */}
-      {activeTab === 'stages' && <StagesTab stages={execution.stages} />}
+      {activeTab === 'stages' && (
+        <StagesTab stages={execution.stages} executionId={execution.summary.execution_id} artifact={execution.artifact ?? null} />
+      )}
       {activeTab === 'timeline' && <ExecutionTimelineView executionId={execution.summary.execution_id} />}
       {activeTab === 'context' && <ContextTab stages={execution.stages} />}
       {activeTab === 'metrics' && <MetricsTab summary={execution.summary} stages={execution.stages} />}
@@ -86,10 +92,22 @@ export const ExecutionResults: React.FC<ExecutionResultsProps> = ({ execution })
 };
 
 // --- Stage Results Tab ---
-const StagesTab: React.FC<{ stages: StageExecutionDetail[] }> = ({ stages }) => (
+const StagesTab: React.FC<{ stages: StageExecutionDetail[]; executionId: string; artifact: Artifact | null }> = ({
+  stages, executionId, artifact,
+}) => (
   <div className="space-y-5">
+    {artifact && artifact.files.length > 0 && (
+      <section aria-label="Combined project" className="rounded-xl border border-primary-500/30 bg-surface-800 px-5 py-4">
+        <p className="mb-3 text-xs text-surface-200/60">Files from all stages, combined into one project.</p>
+        <ArtifactOutput
+          artifact={artifact}
+          getZip={() => executionApi.downloadExecutionZip(executionId)}
+          zipName={`${safeFileStem(artifact.name, 'project')}.zip`}
+        />
+      </section>
+    )}
     {stages.map((stage) => (
-      <StageResult key={stage.id} stage={stage} />
+      <StageResult key={stage.id} stage={stage} executionId={executionId} />
     ))}
   </div>
 );
