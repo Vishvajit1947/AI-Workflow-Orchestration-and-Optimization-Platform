@@ -18,14 +18,18 @@ const api = axios.create({
   withCredentials: true, // Include cookies in requests
 });
 
+/** Pages reachable without a session; a 401 there (e.g. the startup session check) must not redirect. */
+const PUBLIC_PATHS = ['/login', '/signup', '/forgot-password', '/reset-password'];
+
 // Response interceptor for error handling
 api.interceptors.response.use(
   (response) => response,
   (error) => {
     console.error('API Error:', error.response?.data || error.message);
 
-    // Redirect to login on 401 Unauthorized (except if already on login page)
-    if (error.response?.status === 401 && !window.location.pathname.startsWith('/login')) {
+    // Session expired on a protected page: go to login
+    const onPublicPage = PUBLIC_PATHS.some((p) => window.location.pathname.startsWith(p));
+    if (error.response?.status === 401 && !onPublicPage) {
       window.location.href = '/login';
     }
 

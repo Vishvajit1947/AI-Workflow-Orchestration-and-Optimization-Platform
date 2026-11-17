@@ -23,6 +23,8 @@ import { CacheMeter } from '../components/charts/CacheMeter';
 import { BarList } from '../components/charts/BarList';
 import { CHART, ChartCard, DataTable } from '../components/charts/chartKit';
 import { ExportButton } from '../components/analytics/ExportButton';
+import { PageHeader } from '../components/ui/PageHeader';
+import { getErrorMessage } from '../lib/errors';
 
 const RANGES = [
   { days: 7, label: 'Last 7 days' },
@@ -74,8 +76,8 @@ export default function Dashboard() {
       ]);
       setData({ overview, cache, latency, models, stageTypes, routing, costs, tokens });
       setError(null);
-    } catch (err: any) {
-      setError(err.response?.data?.detail || err.message);
+    } catch (err: unknown) {
+      setError(getErrorMessage(err));
     } finally {
       setLoading(false);
     }
@@ -96,12 +98,7 @@ export default function Dashboard() {
 
   return (
     <div>
-      <div className="flex flex-wrap items-start justify-between gap-4 mb-6">
-        <div>
-          <h1 className="text-3xl font-bold">Dashboard</h1>
-          <p className="text-surface-200/50 mt-1">Cost, speed and reliability of workflow executions</p>
-        </div>
-      </div>
+      <PageHeader title="Dashboard" description="Cost, speed, reliability and cache savings of your workflow executions" />
 
       {/* One filter row scoping everything below */}
       <div className="flex flex-wrap items-center gap-3 mb-6" role="group" aria-label="Dashboard filters">
@@ -115,21 +112,20 @@ export default function Dashboard() {
           ))}
         </div>
         <select aria-label="Workflow" value={workflowId} onChange={(e) => setWorkflowId(e.target.value)}
-                className="px-3 py-2 bg-surface-800/50 border border-surface-700/50 rounded-lg text-sm text-white focus:outline-none focus:border-primary-500/50">
+                className="input w-auto max-w-full">
           <option value="">All workflows</option>
           {workflows.map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
         </select>
         <div className="flex gap-2 ml-auto">
-          <button onClick={load} disabled={loading}
-                  className="flex items-center gap-1.5 px-3 py-2 bg-surface-700/50 hover:bg-surface-700 rounded-lg text-sm transition-colors disabled:opacity-50">
-            <RefreshCw size={14} className={loading ? 'animate-spin' : ''} /> Refresh
+          <button onClick={load} disabled={loading} className="btn btn-secondary">
+            <RefreshCw size={14} className={loading ? 'animate-spin' : ''} aria-hidden /> Refresh
           </button>
           <ExportButton filters={exportFilters} />
         </div>
       </div>
 
-      {error && <p className="text-red-400 mb-6">Could not load analytics: {error}</p>}
-      {!data && loading && <p className="text-surface-200/50">Loading analytics…</p>}
+      {error && <p role="alert" className="mb-6 text-sm text-red-400">Could not load analytics: {error}</p>}
+      {!data && loading && <p className="text-sm text-surface-200/50">Loading analytics…</p>}
 
       {data && o && (
         // Refetch keeps the previous render, dimmed: no skeleton flash, no layout jump

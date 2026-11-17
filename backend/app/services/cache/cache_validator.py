@@ -155,7 +155,7 @@ class CacheValidator:
         downstream.discard(changed_stage.id)
         return list(downstream)
 
-    async def cleanup_expired_entries(self) -> int:
+    async def cleanup_expired_entries(self, owner_id: Optional[uuid.UUID] = None) -> int:
         """
         Mark expired cache entries as invalid.
         Intended to run periodically (e.g. a daily job).
@@ -163,7 +163,7 @@ class CacheValidator:
         Returns:
             Number of entries cleaned up.
         """
-        result = await self.db.execute(
+        stmt = (
             update(CacheEntry)
             .where(
                 CacheEntry.expires_at.isnot(None),
@@ -172,6 +172,10 @@ class CacheValidator:
             )
             .values(is_valid=False)
         )
+        if owner_id is not None:  # API callers clean up only their own entries
+            from backend.app.core.ownership import owned_workflow_ids
+            stmt = stmt.where(CacheEntry.workflow_id.in_(owned_workflow_ids(owner_id)))
+        result = await self.db.execute(stmt)
         await self.db.flush()
 
         return result.rowcount

@@ -8,7 +8,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from backend.app.database import get_db
 from backend.app.models.user import User
 from backend.app.services import session_service
-from backend.app.config import settings
 
 
 async def get_current_user(
@@ -42,15 +41,3 @@ async def get_current_active_user(
 
     return current_user
 
-
-async def get_current_verified_user(
-    current_user: User = Depends(get_current_active_user),
-) -> User:
-    """
-    Get the current authenticated, active, and email-verified user.
-    Raises 403 if email verification is required but not completed.
-    """
-    if settings.REQUIRE_EMAIL_VERIFICATION and not current_user.is_email_verified:
-        raise HTTPException(status_code=403, detail="Email verification required")
-
-    return current_user

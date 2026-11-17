@@ -2,10 +2,10 @@
  * Authentication context provider.
  */
 
-import React, { createContext, useState, useEffect, ReactNode } from 'react';
+import { createContext, useState, useEffect, type ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
 import * as authApi from '../api/authApi';
-import { User, LoginData, RegisterData, getErrorMessage } from '../types/auth';
+import type { User, LoginData, RegisterData } from '../types/auth';
 
 interface AuthContextType {
   user: User | null;
@@ -44,16 +44,11 @@ export function AuthProvider({ children }: AuthProviderProps) {
     restoreSession();
   }, []);
 
+  // Errors propagate to the calling page, which shows them inline
   const login = async (data: LoginData) => {
-    try {
-      const user = await authApi.login(data);
-      setUser(user);
-      navigate('/');
-    } catch (error: unknown) {
-      const message = getErrorMessage(error);
-      alert(message);
-      throw error;
-    }
+    const user = await authApi.login(data);
+    setUser(user);
+    navigate('/');
   };
 
   const logout = async () => {
@@ -68,17 +63,10 @@ export function AuthProvider({ children }: AuthProviderProps) {
   };
 
   const register = async (data: RegisterData) => {
-    try {
-      await authApi.register(data);
-      // Do not set user state - user must verify email first
-      navigate('/verify-email', {
-        state: { message: 'Please check your email to verify your account' },
-      });
-    } catch (error: unknown) {
-      const message = getErrorMessage(error);
-      alert(message);
-      throw error;
-    }
+    const response = await authApi.register(data);
+    // Registration signs the user in (the backend sets the session cookie)
+    setUser(response.user ?? (await authApi.getCurrentUser()));
+    navigate('/');
   };
 
   const isAuthenticated = user !== null;

@@ -7,8 +7,10 @@ import {
   Database, CheckCircle2, TrendingUp, Coins, RefreshCw, Trash2, Clock,
   Search, ChevronDown, ChevronRight, XCircle,
 } from 'lucide-react';
-import type { LucideIcon } from 'lucide-react';
 import { cacheApi } from '../api/cacheApi';
+import { getErrorMessage } from '../lib/errors';
+import { PageHeader } from '../components/ui/PageHeader';
+import { MetricCard } from '../components/metrics/MetricCard';
 import type { CacheEntry, CacheStats } from '../types/cache';
 
 const PAGE_SIZE = 25;
@@ -59,8 +61,8 @@ export default function CacheDashboard() {
     try {
       await Promise.all([loadStats(), loadEntries()]);
       setError(null);
-    } catch (err: any) {
-      setError(err.response?.data?.detail || err.message);
+    } catch (err: unknown) {
+      setError(getErrorMessage(err));
     } finally {
       setLoading(false);
     }
@@ -84,8 +86,8 @@ export default function CacheDashboard() {
     try {
       setNotice(await action());
       await loadAll();
-    } catch (err: any) {
-      setNotice(`Failed: ${err.response?.data?.detail || err.message}`);
+    } catch (err: unknown) {
+      setNotice(`Failed: ${getErrorMessage(err)}`);
     } finally {
       setBusy(false);
     }
@@ -125,73 +127,60 @@ export default function CacheDashboard() {
 
   return (
     <div>
-      {/* Header */}
-      <div className="flex flex-wrap items-center justify-between gap-4 mb-8">
-        <div>
-          <h1 className="text-3xl font-bold">Semantic Cache</h1>
-          <p className="text-surface-200/50 mt-1">Reuse of LLM results across similar stage inputs</p>
-        </div>
-        <div className="flex gap-2">
-          <button
-            onClick={() => loadAll()}
-            disabled={busy}
-            className="flex items-center gap-1.5 px-3 py-2 bg-surface-700/50 hover:bg-surface-700 rounded-lg text-sm transition-colors disabled:opacity-50"
-          >
-            <RefreshCw size={14} /> Refresh
-          </button>
-          <button
-            onClick={handleCleanupExpired}
-            disabled={busy}
-            className="flex items-center gap-1.5 px-3 py-2 bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 rounded-lg text-sm transition-colors disabled:opacity-50"
-          >
-            <Clock size={14} /> Cleanup Expired
-          </button>
-          <button
-            onClick={handleClearCache}
-            disabled={busy}
-            className="flex items-center gap-1.5 px-3 py-2 bg-red-500/10 hover:bg-red-500/20 text-red-400 rounded-lg text-sm transition-colors disabled:opacity-50"
-          >
-            <Trash2 size={14} /> Clear All Cache
-          </button>
-        </div>
-      </div>
+      <PageHeader
+        title="Semantic Cache"
+        description="Stage results reused for similar inputs, invalidated when upstream outputs change"
+        actions={
+          <>
+            <button onClick={() => loadAll()} disabled={busy} className="btn btn-secondary">
+              <RefreshCw size={14} aria-hidden /> Refresh
+            </button>
+            <button onClick={handleCleanupExpired} disabled={busy} className="btn bg-amber-500/10 text-amber-300 hover:bg-amber-500/20">
+              <Clock size={14} aria-hidden /> Cleanup Expired
+            </button>
+            <button onClick={handleClearCache} disabled={busy} className="btn btn-danger">
+              <Trash2 size={14} aria-hidden /> Clear All Cache
+            </button>
+          </>
+        }
+      />
 
       {notice && (
-        <div className="mb-6 flex items-center justify-between glass rounded-lg px-4 py-3 text-sm">
+        <div role="status" className="mb-6 flex items-center justify-between glass rounded-lg px-4 py-3 text-sm">
           <span>{notice}</span>
-          <button onClick={() => setNotice(null)} className="text-surface-200/50 hover:text-white">
+          <button onClick={() => setNotice(null)} className="text-surface-200/50 hover:text-white" aria-label="Dismiss">
             <XCircle size={16} />
           </button>
         </div>
       )}
 
-      {loading && <p className="text-surface-200/50">Loading cache data...</p>}
-      {error && <p className="text-red-400 mb-6">Error: {error}</p>}
+      {loading && <p className="text-sm text-surface-200/50">Loading cache data…</p>}
+      {error && <p role="alert" className="mb-6 text-sm text-red-400">Could not load the cache: {error}</p>}
 
       {/* Stats */}
       {stats && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-          <StatCard
+        <div className="mb-6 grid grid-cols-2 gap-3 lg:grid-cols-4">
+          <MetricCard
             icon={Database}
             label="Valid Entries"
             value={stats.total_entries.toLocaleString()}
           />
-          <StatCard
+          <MetricCard
             icon={CheckCircle2}
             label="Cache Hits"
             value={stats.total_hits.toLocaleString()}
-            subtext={stats.total_hits > 0 ? `Avg similarity ${(stats.avg_similarity_score * 100).toFixed(1)}%` : undefined}
+            detail={stats.total_hits > 0 ? `Avg similarity ${(stats.avg_similarity_score * 100).toFixed(1)}%` : undefined}
           />
-          <StatCard
+          <MetricCard
             icon={TrendingUp}
             label="Hit Rate"
             value={`${(stats.hit_rate * 100).toFixed(1)}%`}
           />
-          <StatCard
+          <MetricCard
             icon={Coins}
             label="Tokens Saved"
             value={stats.total_tokens_saved.toLocaleString()}
-            subtext={`$${Number(stats.total_cost_saved).toFixed(4)} saved`}
+            detail={`$${Number(stats.total_cost_saved).toFixed(4)} saved`}
           />
         </div>
       )}
@@ -377,23 +366,6 @@ const EntryRow: React.FC<{
     </>
   );
 };
-
-// --- Stat card ---
-const StatCard: React.FC<{
-  icon: LucideIcon;
-  label: string;
-  value: string;
-  subtext?: string;
-}> = ({ icon: Icon, label, value, subtext }) => (
-  <div className="glass rounded-xl p-5">
-    <div className="flex items-center justify-between mb-2">
-      <p className="text-sm text-surface-200/50">{label}</p>
-      <Icon size={18} className="text-primary-400" />
-    </div>
-    <p className="text-3xl font-bold">{value}</p>
-    {subtext && <p className="text-xs text-surface-200/50 mt-1">{subtext}</p>}
-  </div>
-);
 
 // --- Live hit-rate sparkline (samples collected while the page is open) ---
 const HitRateChart: React.FC<{ samples: HitRateSample[] }> = ({ samples }) => {

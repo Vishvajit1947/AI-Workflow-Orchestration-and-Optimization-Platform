@@ -1,5 +1,5 @@
 """
-Email service: send verification and password reset emails.
+Email service: send password reset emails.
 """
 
 import logging
@@ -63,41 +63,6 @@ async def send_email(
     except Exception as e:
         logger.error(f"Failed to send email to {to_email}: {e}")
         return False
-
-
-async def send_verification_email(to_email: str, full_name: str, token: str) -> bool:
-    """Send an email verification email with a verification link."""
-    verification_url = f"{settings.FRONTEND_URL}/verify-email?token={token}"
-
-    template = jinja_env.get_template("verification_email.html")
-    html_body = template.render(
-        full_name=full_name,
-        verification_url=verification_url,
-        app_name=settings.APP_NAME,
-    )
-
-    text_body = f"""
-Hello {full_name},
-
-Thank you for signing up for {settings.APP_NAME}!
-
-Please verify your email address by clicking the link below:
-{verification_url}
-
-This link will expire in {settings.EMAIL_VERIFICATION_EXPIRE_HOURS} hours.
-
-If you didn't create an account, you can safely ignore this email.
-
-Best regards,
-The {settings.APP_NAME} Team
-    """.strip()
-
-    return await send_email(
-        to_email=to_email,
-        subject=f"Verify your {settings.APP_NAME} email address",
-        html_body=html_body,
-        text_body=text_body,
-    )
 
 
 async def send_password_reset_email(to_email: str, full_name: str, token: str) -> bool:

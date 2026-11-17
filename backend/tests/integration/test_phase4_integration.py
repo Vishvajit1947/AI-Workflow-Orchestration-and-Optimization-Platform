@@ -374,7 +374,7 @@ async def test_e2e_use_routing_false_skips_router(seeded_routing_rules, provider
     assert stubs["groq"].models_called == ["llama-3.1-8b-instant"]
 
 
-async def test_e2e_cache_hits_bypass_routing(seeded_routing_rules, providers, mock_embeddings):
+async def test_e2e_cache_hits_bypass_routing(seeded_routing_rules, providers, mock_embeddings, test_user):
     db = seeded_routing_rules
     stubs = providers(*ALL_PROVIDERS)
     workflow = await make_workflow(db, ("Analyze", "analysis"), ("Code", "generation"))

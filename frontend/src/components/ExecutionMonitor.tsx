@@ -8,20 +8,12 @@ import { useExecutionStatus } from '../hooks/useExecutionStatus';
 import { DAGLegend, DAGVisualization, STATUS_STYLES } from './DAGVisualization';
 import { ExecutionControls } from './ExecutionControls';
 import type { ExecutionStatus, LiveStageStatus } from '../types/execution';
+import { StatusBadge } from './ui/StatusBadge';
 
 interface ExecutionMonitorProps {
   executionId: string;
   onFinished?: (status: ExecutionStatus) => void;
 }
-
-const STATUS_BADGES: Record<string, string> = {
-  queued: 'bg-surface-700/50 text-surface-200/70',
-  running: 'bg-blue-500/15 text-blue-300',
-  paused: 'bg-amber-500/15 text-amber-300',
-  completed: 'bg-primary-500/15 text-primary-400',
-  failed: 'bg-red-500/15 text-red-300',
-  cancelled: 'bg-surface-700/50 text-surface-200/70',
-};
 
 export const ExecutionMonitor: React.FC<ExecutionMonitorProps> = ({ executionId, onFinished }) => {
   const { status, connected, isActive } = useExecutionStatus(executionId);
@@ -35,7 +27,7 @@ export const ExecutionMonitor: React.FC<ExecutionMonitorProps> = ({ executionId,
   }, [status, isActive, executionId, onFinished]);
 
   if (!status) {
-    return <div className="glass rounded-xl p-6 text-surface-200/50">Starting execution…</div>;
+    return <div className="glass rounded-xl p-6 text-sm text-surface-200/50" role="status">Starting execution…</div>;
   }
 
   const byId = Object.fromEntries(status.stages.map((s) => [s.stage_id, s]));
@@ -43,18 +35,16 @@ export const ExecutionMonitor: React.FC<ExecutionMonitorProps> = ({ executionId,
   const failures = status.stages.filter((s) => s.error && s.status !== 'skipped');
 
   return (
-    <div className="glass rounded-xl p-6 space-y-6" data-testid="execution-monitor">
+    <div className="glass space-y-6 rounded-xl p-5 sm:p-6" data-testid="execution-monitor">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-3">
-          <h2 className="text-xl font-semibold">Live Execution</h2>
-          <span data-testid="live-status" className={`px-2.5 py-1 rounded-full text-xs font-medium ${STATUS_BADGES[status.status]}`}>
-            {status.status}
-          </span>
+        <div className="flex flex-wrap items-center gap-3">
+          <h2 className="text-lg font-semibold">Live Execution</h2>
+          <StatusBadge status={status.status} data-testid="live-status" />
           <span className="text-xs text-surface-200/40">{status.parallel ? 'parallel' : 'sequential'}</span>
           {isActive && (
             <span className={`flex items-center gap-1 text-xs ${connected ? 'text-primary-400' : 'text-surface-200/40'}`}
                   title={connected ? 'Live updates via WebSocket' : 'Polling for updates'}>
-              <Radio size={12} /> {connected ? 'live' : 'polling'}
+              <Radio size={12} aria-hidden /> {connected ? 'live' : 'polling'}
             </span>
           )}
         </div>
@@ -118,14 +108,14 @@ export const Timeline: React.FC<{ stages: LiveStageStatus[] }> = ({ stages }) =>
           const seconds = s.started_at ? ((end(s) - Date.parse(s.started_at)) / 1000).toFixed(1) : null;
           return (
             <div key={s.stage_id} className="flex items-center gap-3 text-xs" data-testid={`timeline-${s.stage_id}`}>
-              <span className="w-36 truncate text-surface-200/70" title={s.name}>{s.name}</span>
+              <span className="w-24 truncate text-surface-200/70 sm:w-36" title={s.name}>{s.name}</span>
               <div className="relative flex-1 h-4 rounded bg-surface-800/60">
                 {s.started_at && (
                   <div className="absolute top-0 h-4 rounded border"
                        style={{ left: `${left}%`, width: `${width}%`, background: style.fill, borderColor: style.stroke }} />
                 )}
               </div>
-              <span className="w-24 text-right text-surface-200/50">
+              <span className="w-16 text-right text-surface-200/50 sm:w-24">
                 {seconds ? `${seconds}s` : style.label.toLowerCase()}
               </span>
             </div>

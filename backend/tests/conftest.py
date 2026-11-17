@@ -9,7 +9,7 @@ import random
 from typing import Optional
 from unittest.mock import AsyncMock, MagicMock, patch
 from httpx import AsyncClient, ASGITransport
-from sqlalchemy import text
+from sqlalchemy import event, text
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
 from sqlalchemy.pool import NullPool
 from backend.app.database import Base, get_db
@@ -20,6 +20,9 @@ from backend.app.models import (
     WorkflowContext, ExecutionRecord, CacheEntry,
     ModelProfile, RoutingRule, RoutingDecision
 )
+from backend.app.core.security import hash_password
+from backend.app.models.user import User
+from backend.app.services import session_service
 from backend.app.services.llm import registry
 from backend.app.services.llm.base import BaseLLMProvider, LLMResponse
 import uuid
@@ -66,23 +69,96 @@ async def db_session(engine):
         yield session
 
 
+# ---------- Authentication ----------
+# The API requires a signed-in user. Tests authenticate the real way: a users row plus a
+# real session whose token is sent as the session_token cookie.
+
+async def create_user_with_session(db: AsyncSession, email: str, full_name: str = "Test User"):
+    """Insert an active user and a session for them; returns (user, session token)."""
+    user = User(
+        email=email,
+        email_normalized=email.lower(),
+        password_hash=hash_password("Test-Passw0rd!2026"),
+        full_name=full_name,
+    )
+    db.add(user)
+    await db.flush()
+    _, token = await session_service.create_session(db, user.id)
+    await db.commit()
+    await db.refresh(user)
+    return user, token
+
+
 @pytest_asyncio.fixture
-async def client(engine, db_session):
-    """Create a test HTTP client with overridden database dependency"""
+async def test_user(db_session):
+    """
+    The user the default `client` is signed in as.
+
+    Many feature tests insert workflows straight into the database. While this fixture
+    is active, a workflow inserted without an owner is given this user as owner (the
+    user "created" it), so those tests keep exercising the API as its owner. Tests that
+    need other owners, or no owner, set user_id explicitly / afterwards.
+    """
+    user, token = await create_user_with_session(db_session, f"owner-{uuid.uuid4().hex[:8]}@example.com", "Owner")
+    user.session_token = token  # convenience for tests that build their own client
+
+    def assign_owner(_mapper, _connection, workflow):
+        if workflow.user_id is None and not getattr(workflow, "_test_unowned", False):
+            workflow.user_id = user.id
+
+    event.listen(Workflow, "before_insert", assign_owner)
+    yield user
+    event.remove(Workflow, "before_insert", assign_owner)
+
+
+def _override_db(db_session):
     async def override_get_db():
         yield db_session
-    
     app.dependency_overrides[get_db] = override_get_db
-    
+
+
+@pytest_asyncio.fixture
+async def client(engine, db_session, test_user):
+    """HTTP client signed in as `test_user`, sharing the test database session."""
+    _override_db(db_session)
     transport = ASGITransport(app=app)
-    async with AsyncClient(transport=transport, base_url="http://test") as ac:
+    async with AsyncClient(
+        transport=transport, base_url="http://test", cookies={"session_token": test_user.session_token}
+    ) as ac:
         yield ac
-    
     app.dependency_overrides.clear()
 
 
 @pytest_asyncio.fixture
-async def sample_workflow(db_session):
+async def anon_client(engine, db_session):
+    """HTTP client with no session cookie."""
+    _override_db(db_session)
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+        yield ac
+    app.dependency_overrides.clear()
+
+
+@pytest_asyncio.fixture
+async def make_user_client(engine, db_session):
+    """Factory: `user, client = await make_user_client("b@example.com")` for a second signed-in user."""
+    _override_db(db_session)
+    clients = []
+
+    async def make(email: str):
+        user, token = await create_user_with_session(db_session, email)
+        ac = AsyncClient(transport=ASGITransport(app=app), base_url="http://test",
+                         cookies={"session_token": token})
+        clients.append(ac)
+        return user, ac
+
+    yield make
+    for ac in clients:
+        await ac.aclose()
+    app.dependency_overrides.clear()
+
+
+@pytest_asyncio.fixture
+async def sample_workflow(db_session, test_user):
     """Create a sample workflow for testing"""
     workflow = Workflow(
         id=uuid.uuid4(),
@@ -116,7 +192,7 @@ async def sample_stage(db_session, sample_workflow):
 
 
 @pytest_asyncio.fixture
-async def sample_workflow_with_stages(db_session):
+async def sample_workflow_with_stages(db_session, test_user):
     """Create a sample 3-stage workflow for integration testing"""
     workflow = Workflow(
         id=uuid.uuid4(),

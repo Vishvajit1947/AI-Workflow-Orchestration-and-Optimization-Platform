@@ -1,13 +1,13 @@
 /**
- * Forgot password page.
+ * Forgot password page: requests a reset link for an email address.
  */
-
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowLeft, Loader2 } from 'lucide-react';
+import { ArrowLeft } from 'lucide-react';
 import AuthLayout from '../components/AuthLayout';
+import { AuthHeading, FormAlert, SubmitButton, TextField, authLinkClass } from '../components/auth/AuthFields';
 import * as authApi from '../api/authApi';
-import { getErrorMessage } from '../types/auth';
+import { getErrorMessage } from '../lib/errors';
 
 export default function ForgotPassword() {
   const [email, setEmail] = useState('');
@@ -19,7 +19,6 @@ export default function ForgotPassword() {
     e.preventDefault();
     setError('');
     setLoading(true);
-
     try {
       await authApi.forgotPassword({ email });
       setSuccess(true);
@@ -32,60 +31,29 @@ export default function ForgotPassword() {
 
   return (
     <AuthLayout>
-      <div>
-        <h1 className="text-3xl font-bold text-gray-900 mb-2">Reset your password</h1>
-        <p className="text-gray-600 mb-8">
-          Enter your email address and we'll send you a link to reset your password.
-        </p>
+      <AuthHeading title="Reset your password" subtitle="Enter your account email to request a password reset link." />
 
-        {success ? (
-          <div className="mb-6 p-4 bg-green-50 border border-green-200 rounded-lg text-green-700 text-sm">
-            If an account exists for this email address, password reset instructions have been sent.
-          </div>
-        ) : null}
+      {success && (
+        <FormAlert tone="success">
+          If an account exists for this email address, password reset instructions have been sent.
+        </FormAlert>
+      )}
+      {error && <FormAlert tone="error">{error}</FormAlert>}
 
-        {error && (
-          <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
-            {error}
-          </div>
-        )}
+      {!success && (
+        <form onSubmit={handleSubmit} className="space-y-5">
+          <TextField
+            id="email" label="Email" type="email" autoComplete="email" required
+            value={email} onChange={setEmail} placeholder="you@example.com"
+          />
+          <SubmitButton loading={loading}>Send reset link</SubmitButton>
+        </form>
+      )}
 
-        {!success && (
-          <form onSubmit={handleSubmit} className="space-y-6">
-            <div>
-              <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-2">
-                Email Address
-              </label>
-              <input
-                id="email"
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                required
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                placeholder="you@example.com"
-              />
-            </div>
-
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full py-3 bg-primary-500 text-white rounded-lg font-medium hover:bg-primary-600 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-            >
-              {loading && <Loader2 size={20} className="animate-spin" />}
-              Send reset link
-            </button>
-          </form>
-        )}
-
-        <Link
-          to="/login"
-          className="mt-8 flex items-center justify-center gap-2 text-sm text-primary-500 hover:text-primary-600"
-        >
-          <ArrowLeft size={16} />
-          Back to login
-        </Link>
-      </div>
+      <Link to="/login" className={`mt-8 flex items-center justify-center gap-2 text-sm ${authLinkClass}`}>
+        <ArrowLeft size={16} aria-hidden />
+        Back to sign in
+      </Link>
     </AuthLayout>
   );
 }

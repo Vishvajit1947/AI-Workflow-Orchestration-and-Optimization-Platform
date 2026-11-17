@@ -34,52 +34,10 @@ export interface ResetPasswordData {
   new_password: string;
 }
 
-export interface VerifyEmailData {
-  token: string;
-}
-
 export interface AuthResponse {
   message?: string;
   user?: User;
 }
 
-/**
- * API error response structure.
- */
-export interface ApiError {
-  response?: {
-    data?: {
-      detail?: string;
-      message?: string;
-    };
-    status?: number;
-  };
-  message?: string;
-}
-
-/**
- * Type guard to check if an error is an ApiError.
- */
-export function isApiError(error: unknown): error is ApiError {
-  return (
-    typeof error === 'object' &&
-    error !== null &&
-    ('response' in error || 'message' in error)
-  );
-}
-
-/**
- * Extract error message from unknown error object.
- */
-export function getErrorMessage(error: unknown): string {
-  if (isApiError(error)) {
-    return error.response?.data?.detail || 
-           error.response?.data?.message || 
-           error.message || 
-           'An unexpected error occurred';
-  }
-  if (error instanceof Error) {
-    return error.message;
-  }
-  return 'An unexpected error occurred';
-}
+// Kept here so existing auth imports keep working; the implementation is shared app-wide.
+export { getErrorMessage } from '../lib/errors';

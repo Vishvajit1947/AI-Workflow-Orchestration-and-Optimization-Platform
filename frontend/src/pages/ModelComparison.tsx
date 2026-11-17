@@ -4,13 +4,15 @@
  */
 import React, { useCallback, useEffect, useState } from 'react';
 import { Coins, Zap, Trophy, RefreshCw, Save, Trash2, Plus, XCircle } from 'lucide-react';
-import type { LucideIcon } from 'lucide-react';
 import { modelsApi } from '../api/modelsApi';
 import { routingApi } from '../api/routingApi';
 import type {
   ModelComparison as Comparison, ModelProfile, PriorityFactor, RoutingDecision, RoutingRule, RoutingRuleInput,
 } from '../types/routing';
 import { CAPABILITIES, typicalCallCost } from '../types/routing';
+import { getErrorMessage } from '../lib/errors';
+import { PageHeader } from '../components/ui/PageHeader';
+import { MetricCard } from '../components/metrics/MetricCard';
 
 const STAGE_TYPES = ['analysis', 'design', 'generation', 'testing', 'documentation', 'review', 'custom'];
 const PRIORITIES: PriorityFactor[] = ['balanced', 'quality', 'cost', 'speed'];
@@ -83,8 +85,8 @@ export const ModelComparison: React.FC = () => {
       setDrafts(Object.fromEntries(ruleList.map((r) => [r.stage_type, toDraft(r)])));
       setDecisions(decisionList);
       setError(null);
-    } catch (err: any) {
-      setError(err.response?.data?.detail || err.message);
+    } catch (err: unknown) {
+      setError(getErrorMessage(err));
     } finally {
       setLoading(false);
     }
@@ -100,9 +102,8 @@ export const ModelComparison: React.FC = () => {
       await action();
       setNotice(message);
       await loadData();
-    } catch (err: any) {
-      const detail = err.response?.data?.detail;
-      setNotice(`Failed: ${typeof detail === 'string' ? detail : err.message}`);
+    } catch (err: unknown) {
+      setNotice(`Failed: ${getErrorMessage(err)}`);
     } finally {
       setBusy(false);
     }
@@ -136,43 +137,39 @@ export const ModelComparison: React.FC = () => {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-8">
-        <div>
-          <h1 className="text-3xl font-bold">Models & Routing</h1>
-          <p className="text-surface-200/50 mt-1">Which LLM each stage type is sent to, and why</p>
-        </div>
-        <button
-          onClick={() => loadData()}
-          disabled={busy}
-          className="flex items-center gap-1.5 px-3 py-2 bg-surface-700/50 hover:bg-surface-700 rounded-lg text-sm transition-colors disabled:opacity-50"
-        >
-          <RefreshCw size={14} /> Refresh
-        </button>
-      </div>
+      <PageHeader
+        title="Models & Routing"
+        description="Which LLM each stage type is sent to, and why"
+        actions={
+          <button onClick={() => loadData()} disabled={busy} className="btn btn-secondary">
+            <RefreshCw size={14} aria-hidden /> Refresh
+          </button>
+        }
+      />
 
       {notice && (
-        <div className="mb-6 flex items-center justify-between glass rounded-lg px-4 py-3 text-sm">
+        <div role="status" className="mb-6 flex items-center justify-between glass rounded-lg px-4 py-3 text-sm">
           <span>{notice}</span>
-          <button onClick={() => setNotice(null)} className="text-surface-200/50 hover:text-white">
+          <button onClick={() => setNotice(null)} className="text-surface-200/50 hover:text-white" aria-label="Dismiss">
             <XCircle size={16} />
           </button>
         </div>
       )}
 
-      {loading && <p className="text-surface-200/50">Loading models...</p>}
-      {error && <p className="text-red-400 mb-6">Error: {error}</p>}
+      {loading && <p className="text-sm text-surface-200/50">Loading models…</p>}
+      {error && <p role="alert" className="mb-6 text-sm text-red-400">Could not load models: {error}</p>}
 
       {comparison && (
         <>
           {/* Highlights */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
-            <Highlight icon={Coins} label="Most Cost-Effective" value={displayName(comparison.cheapest)} />
-            <Highlight icon={Zap} label="Fastest" value={displayName(comparison.fastest)} />
-            <Highlight icon={Trophy} label="Best for Code Generation" value={displayName(comparison.most_capable.generation)} />
+          <div className="mb-8 grid grid-cols-1 gap-3 md:grid-cols-3">
+            <MetricCard icon={Coins} label="Most Cost-Effective" value={displayName(comparison.cheapest)} />
+            <MetricCard icon={Zap} label="Fastest" value={displayName(comparison.fastest)} />
+            <MetricCard icon={Trophy} label="Best for Code Generation" value={displayName(comparison.most_capable.generation)} />
           </div>
 
           {/* Models table */}
-          <h2 className="text-xl font-semibold mb-3">Model Registry</h2>
+          <h2 className="mb-3 text-lg font-semibold">Model Registry</h2>
           <div className="glass rounded-xl overflow-x-auto mb-10">
             <table className="w-full text-sm">
               <thead className="text-surface-200/50 text-xs uppercase tracking-wide border-b border-surface-700/50">
@@ -225,7 +222,7 @@ export const ModelComparison: React.FC = () => {
           </div>
 
           {/* Routing rules */}
-          <h2 className="text-xl font-semibold mb-1">Routing Rules</h2>
+          <h2 className="mb-1 text-lg font-semibold">Routing Rules</h2>
           <p className="text-sm text-surface-200/50 mb-3">
             Per stage type: candidates must meet the minimum score and limits; the priority picks among them.
             A preferred model skips selection; the fallback is used when no candidate qualifies.
@@ -370,7 +367,7 @@ export const ModelComparison: React.FC = () => {
           </div>
 
           {/* Recent decisions */}
-          <h2 className="text-xl font-semibold mb-3">Recent Routing Decisions</h2>
+          <h2 className="mb-3 text-lg font-semibold">Recent Routing Decisions</h2>
           <div className="glass rounded-xl overflow-x-auto">
             {decisions.length === 0 ? (
               <p className="px-4 py-6 text-sm text-surface-200/40">No routing decisions yet. Execute a workflow to see them.</p>
@@ -415,16 +412,6 @@ export const ModelComparison: React.FC = () => {
     </div>
   );
 };
-
-const Highlight: React.FC<{ icon: LucideIcon; label: string; value: string }> = ({ icon: Icon, label, value }) => (
-  <div className="glass rounded-xl p-5">
-    <div className="flex items-center gap-2 text-surface-200/50 text-sm mb-2">
-      <Icon size={16} className="text-primary-400" />
-      {label}
-    </div>
-    <p className="text-2xl font-bold">{value}</p>
-  </div>
-);
 
 const ModelStatus: React.FC<{ model: ModelProfile }> = ({ model }) => {
   if (!model.is_available) return <Tag className="bg-surface-700/50 text-surface-200/50">disabled</Tag>;

@@ -6,7 +6,7 @@ Represents a multi-stage AI workflow that can be created, configured, and execut
 import uuid
 from datetime import datetime
 
-from sqlalchemy import String, Text, DateTime, func
+from sqlalchemy import String, Text, DateTime, ForeignKey, func
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -25,6 +25,14 @@ class Workflow(Base):
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     objective: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Owner. Nullable only for workflows created before ownership existed: those rows
+    # belong to nobody and are not returned by any API query (see core/ownership.py).
+    user_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=True,
+        index=True,
+    )
     status: Mapped[str] = mapped_column(
         String(50), default="draft", server_default="draft"
     )

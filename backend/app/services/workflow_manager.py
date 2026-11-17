@@ -16,10 +16,16 @@ from backend.app.schemas.workflow import WorkflowCreate, WorkflowUpdate
 
 
 class WorkflowManager:
-    """Handles all workflow-level business logic."""
+    """
+    Handles all workflow-level business logic for one user.
 
-    def __init__(self, db: AsyncSession):
+    Every query is scoped to `owner_id`: workflows of other users (and unowned legacy
+    workflows) behave exactly like workflows that do not exist (404).
+    """
+
+    def __init__(self, db: AsyncSession, owner_id: uuid.UUID):
         self.db = db
+        self.owner_id = owner_id
 
     async def create_workflow(self, data: WorkflowCreate) -> Workflow:
         """Create a new workflow."""
@@ -27,6 +33,7 @@ class WorkflowManager:
             name=data.name,
             description=data.description,
             objective=data.objective,
+            user_id=self.owner_id,
         )
         self.db.add(workflow)
         await self.db.commit()
@@ -37,14 +44,14 @@ class WorkflowManager:
         stmt = (
             select(Workflow)
             .options(selectinload(Workflow.stages))
-            .where(Workflow.id == workflow_id)
+            .where(Workflow.id == workflow_id, Workflow.user_id == self.owner_id)
         )
         result = await self.db.execute(stmt)
         workflow = result.scalar_one_or_none()
         if not workflow:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Workflow {workflow_id} not found",
+                detail="Workflow not found",
             )
         return workflow
 
@@ -52,8 +59,8 @@ class WorkflowManager:
         self, skip: int = 0, limit: int = 20, status_filter: Optional[str] = None
     ) -> tuple[list[Workflow], int]:
         """List workflows with pagination. Returns (items, total_count)."""
-        query = select(Workflow)
-        count_query = select(func.count(Workflow.id))
+        query = select(Workflow).where(Workflow.user_id == self.owner_id)
+        count_query = select(func.count(Workflow.id)).where(Workflow.user_id == self.owner_id)
 
         if status_filter:
             query = query.where(Workflow.status == status_filter)

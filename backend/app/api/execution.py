@@ -13,7 +13,12 @@ from sqlalchemy.orm import selectinload
 
 from backend.app.artifacts import aggregate_artifacts
 from backend.app.artifacts.service import record_artifact
+from backend.app.core.dependencies import get_current_active_user
+from backend.app.core.ownership import (
+    get_owned_workflow, owned_workflow_ids, require_owned_execution, not_found,
+)
 from backend.app.database import get_db, get_session_factory
+from backend.app.models.user import User
 from backend.app.models.workflow import Workflow
 from backend.app.models.stage import Stage
 from backend.app.models.execution import ExecutionRecord
@@ -39,6 +44,7 @@ async def start_workflow_execution(
     request: ExecutionStartRequest,
     db: AsyncSession = Depends(get_db),
     session_factory=Depends(get_session_factory),
+    current_user: User = Depends(get_current_active_user),
 ):
     """
     Execute a workflow.
@@ -46,14 +52,9 @@ async def start_workflow_execution(
     returns at once (status "running"); follow progress via GET /executions/{id}/status
     or the WebSocket at /ws/executions/{id}.
     """
-    result = await db.execute(
-        select(Workflow)
-        .options(selectinload(Workflow.stages).selectinload(Stage.dependencies))
-        .where(Workflow.id == workflow_id)
+    workflow = await get_owned_workflow(
+        db, workflow_id, current_user.id, selectinload(Workflow.stages).selectinload(Stage.dependencies)
     )
-    workflow = result.scalar_one_or_none()
-    if not workflow:
-        raise HTTPException(status_code=404, detail=f"Workflow {workflow_id} not found")
 
     if workflow.status in ("running", "paused"):
         raise HTTPException(status_code=409, detail=f"Workflow is already {workflow.status}")
@@ -111,20 +112,24 @@ async def start_workflow_execution(
 @router.get("/executions/{execution_id}", response_model=ExecutionDetailResponse)
 async def get_execution_details(
     execution_id: uuid.UUID,
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
 ):
     """Get detailed execution results including all stage outputs."""
-    # Get all execution records for this execution
+    # Only records of the caller's own workflows: another user's execution is a 404
     result = await db.execute(
         select(ExecutionRecord)
         .options(selectinload(ExecutionRecord.stage), selectinload(ExecutionRecord.workflow))
-        .where(ExecutionRecord.execution_id == execution_id)
+        .where(
+            ExecutionRecord.execution_id == execution_id,
+            ExecutionRecord.workflow_id.in_(owned_workflow_ids(current_user.id)),
+        )
         .order_by(ExecutionRecord.created_at)
     )
     records = result.scalars().all()
 
     if not records:
-        raise HTTPException(status_code=404, detail=f"Execution {execution_id} not found")
+        raise not_found("Execution")
 
     # Build summary
     workflow = records[0].workflow
@@ -207,9 +212,10 @@ async def list_executions(
     workflow_id: Optional[uuid.UUID] = Query(None, description="Filter by workflow ID"),
     limit: int = Query(20, ge=1, le=100),
     offset: int = Query(0, ge=0),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
 ):
-    """List all executions, optionally filtered by workflow."""
+    """List the caller's executions, optionally filtered by workflow."""
     # Subquery to get unique execution_ids with aggregated data
     subq = (
         select(
@@ -223,6 +229,7 @@ async def list_executions(
             func.max(ExecutionRecord.completed_at).label("completed_at"),
             func.sum(ExecutionRecord.estimated_cost).label("total_cost")
         )
+        .where(ExecutionRecord.workflow_id.in_(owned_workflow_ids(current_user.id)))
         .group_by(ExecutionRecord.execution_id, ExecutionRecord.workflow_id)
     )
     
@@ -278,9 +285,11 @@ async def list_executions(
 @router.get("/workflows/{workflow_id}/executions/latest", response_model=ExecutionDetailResponse)
 async def get_latest_execution(
     workflow_id: uuid.UUID,
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
 ):
     """Get the most recent execution for a workflow."""
+    await get_owned_workflow(db, workflow_id, current_user.id)
     # Find latest execution_id for this workflow (by started_at)
     result = await db.execute(
         select(ExecutionRecord.execution_id)
@@ -291,20 +300,25 @@ async def get_latest_execution(
     execution_id = result.scalar_one_or_none()
 
     if not execution_id:
-        raise HTTPException(status_code=404, detail=f"No executions found for workflow {workflow_id}")
+        raise HTTPException(status_code=404, detail="No executions found for this workflow")
 
     # Reuse get_execution_details logic
-    return await get_execution_details(execution_id, db)
+    return await get_execution_details(execution_id, db, current_user)
 
 
 # ---------- Live status and control ----------
 
 @router.get("/executions/{execution_id}/status", response_model=ExecutionStatusResponse)
-async def get_execution_status(execution_id: uuid.UUID):
+async def get_execution_status(
+    execution_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+):
     """Live per-stage status of an execution run by this server (kept for a while after it ends)."""
+    await require_owned_execution(db, execution_id, current_user.id)
     live = tracker.get(execution_id)
     if live is None:
-        raise HTTPException(status_code=404, detail=f"No live status for execution {execution_id}")
+        raise HTTPException(status_code=404, detail="No live status for this execution")
     return live.snapshot()
 
 
@@ -319,38 +333,52 @@ async def _control(execution_id: uuid.UUID, action: str) -> ExecutionControlResp
     try:
         live = await getattr(tracker, action)(execution_id)
     except KeyError:
-        raise HTTPException(status_code=404, detail=f"Execution {execution_id} not found")
+        raise not_found("Execution")
     except RuntimeError as e:
         raise HTTPException(status_code=409, detail=str(e))
     return ExecutionControlResponse(execution_id=execution_id, status=live.status, message=CONTROL_MESSAGES[action])
 
 
 @router.post("/executions/{execution_id}/pause", response_model=ExecutionControlResponse)
-async def pause_execution(execution_id: uuid.UUID):
+async def pause_execution(
+    execution_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+):
+    await require_owned_execution(db, execution_id, current_user.id)
     return await _control(execution_id, "pause")
 
 
 @router.post("/executions/{execution_id}/resume", response_model=ExecutionControlResponse)
-async def resume_execution(execution_id: uuid.UUID):
+async def resume_execution(
+    execution_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+):
+    await require_owned_execution(db, execution_id, current_user.id)
     return await _control(execution_id, "resume")
 
 
 @router.post("/executions/{execution_id}/cancel", response_model=ExecutionControlResponse)
-async def cancel_execution(execution_id: uuid.UUID):
+async def cancel_execution(
+    execution_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+):
+    await require_owned_execution(db, execution_id, current_user.id)
     return await _control(execution_id, "cancel")
 
 
 @router.get("/workflows/{workflow_id}/dag", response_model=WorkflowDAGResponse)
-async def get_workflow_dag(workflow_id: uuid.UUID, db: AsyncSession = Depends(get_db)):
+async def get_workflow_dag(
+    workflow_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+):
     """Dependency graph: execution levels, merge points, critical path, parallelism."""
-    result = await db.execute(
-        select(Workflow)
-        .options(selectinload(Workflow.stages).selectinload(Stage.dependencies))
-        .where(Workflow.id == workflow_id)
+    workflow = await get_owned_workflow(
+        db, workflow_id, current_user.id, selectinload(Workflow.stages).selectinload(Stage.dependencies)
     )
-    workflow = result.scalar_one_or_none()
-    if not workflow:
-        raise HTTPException(status_code=404, detail=f"Workflow {workflow_id} not found")
     try:
         analyzer = DAGAnalyzer(workflow.stages)
     except DAGCycleError as e:
@@ -359,9 +387,14 @@ async def get_workflow_dag(workflow_id: uuid.UUID, db: AsyncSession = Depends(ge
 
 
 @router.get("/workflows/{workflow_id}/executions/live", response_model=ExecutionStatusResponse)
-async def get_live_execution(workflow_id: uuid.UUID):
+async def get_live_execution(
+    workflow_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+):
     """The workflow's execution that is still queued, running or paused on this server."""
+    await get_owned_workflow(db, workflow_id, current_user.id)
     live = tracker.find_active(workflow_id)
     if live is None:
-        raise HTTPException(status_code=404, detail=f"No active execution for workflow {workflow_id}")
+        raise HTTPException(status_code=404, detail="No active execution for this workflow")
     return live.snapshot()

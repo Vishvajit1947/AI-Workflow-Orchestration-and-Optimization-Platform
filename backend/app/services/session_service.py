@@ -3,7 +3,7 @@ Session service: manage user authentication sessions.
 """
 
 import uuid
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import select, delete
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -22,7 +22,7 @@ async def create_session(
     """
     plain_token = generate_secure_token(32)
     token_hash = hash_token(plain_token)
-    expires_at = datetime.utcnow() + timedelta(days=expires_in_days)
+    expires_at = datetime.now(timezone.utc) + timedelta(days=expires_in_days)
 
     session = Session(
         user_id=user_id,
@@ -52,11 +52,11 @@ async def validate_session(db: AsyncSession, session_token: str) -> User | None:
         return None
 
     # Check expiration
-    if session.expires_at < datetime.utcnow():
+    if session.expires_at < datetime.now(timezone.utc):
         return None
 
     # Update last_used_at
-    session.last_used_at = datetime.utcnow()
+    session.last_used_at = datetime.now(timezone.utc)
     await db.flush()
 
     # Load user
@@ -86,7 +86,7 @@ async def refresh_session(
     if not session:
         return None
 
-    session.expires_at = datetime.utcnow() + timedelta(days=expires_in_days)
+    session.expires_at = datetime.now(timezone.utc) + timedelta(days=expires_in_days)
     await db.flush()
     await db.refresh(session)
 

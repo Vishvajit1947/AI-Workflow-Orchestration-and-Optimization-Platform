@@ -10,6 +10,8 @@ import { ArtifactOutput } from './results/ArtifactOutput';
 import { executionApi } from '../api/executionApi';
 import { safeFileStem } from '../lib/download';
 import type { Artifact } from '../types/execution';
+import { StatusBadge } from './ui/StatusBadge';
+import { MetricCard } from './metrics/MetricCard';
 
 const CacheHitBadge: React.FC = () => (
   <span className="px-2 py-1 bg-primary-500/15 text-primary-400 rounded text-xs font-medium flex items-center gap-1">
@@ -22,56 +24,42 @@ interface ExecutionResultsProps {
   execution: ExecutionDetailResponse;
 }
 
-const STATUS_COLORS = {
-  pending: 'bg-surface-700/50 text-surface-200/70',
-  running: 'bg-blue-500/15 text-blue-300',
-  completed: 'bg-primary-500/15 text-primary-400',
-  failed: 'bg-red-500/15 text-red-300',
-  skipped: 'bg-amber-500/15 text-amber-300',
-  cancelled: 'bg-surface-700/50 text-surface-200/60'
-};
+const TABS = [
+  { id: 'stages', label: 'Stage Results' },
+  { id: 'timeline', label: 'Timeline' },
+  { id: 'context', label: 'Context Flow' },
+  { id: 'metrics', label: 'Metrics' },
+] as const;
+
+type TabId = (typeof TABS)[number]['id'];
 
 export const ExecutionResults: React.FC<ExecutionResultsProps> = ({ execution }) => {
-  const [activeTab, setActiveTab] = useState<'stages' | 'timeline' | 'context' | 'metrics'>('stages');
-
-  const tabs = [
-    { id: 'stages', label: 'Stage Results' },
-    { id: 'timeline', label: 'Timeline' },
-    { id: 'context', label: 'Context Flow' },
-    { id: 'metrics', label: 'Metrics' }
-  ];
+  const [activeTab, setActiveTab] = useState<TabId>('stages');
 
   return (
-    <div className="glass text-white rounded-lg shadow-md p-6">
-      {/* Header */}
-      <div className="mb-6">
-        <div className="flex items-center justify-between mb-2">
-          <h2 className="text-2xl font-bold">Execution Results</h2>
-          <span
-            data-testid="execution-status"
-            className={`px-3 py-1 rounded-full text-sm font-medium ${
-              STATUS_COLORS[execution.summary.status as keyof typeof STATUS_COLORS]
-            }`}
-          >
-            {execution.summary.status}
-          </span>
+    <div className="glass rounded-xl p-5 text-white sm:p-6">
+      <div className="mb-5 flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0">
+          <h2 className="text-lg font-semibold">Execution Results</h2>
+          <p className="mt-0.5 truncate font-mono text-xs text-surface-200/40" title="Execution ID">
+            {execution.summary.execution_id}
+          </p>
         </div>
-        <p className="text-surface-200/60 text-sm">
-          Execution ID: <code className="bg-surface-900 border border-surface-700 px-2 py-1 rounded">{execution.summary.execution_id}</code>
-        </p>
+        <StatusBadge status={execution.summary.status} data-testid="execution-status" />
       </div>
 
-      {/* Tabs */}
-      <div className="border-b border-surface-700 mb-6">
-        <div className="flex gap-4">
-          {tabs.map((tab) => (
+      <div className="mb-6 overflow-x-auto border-b border-surface-700">
+        <div className="flex gap-5" role="tablist" aria-label="Execution result views">
+          {TABS.map((tab) => (
             <button
               key={tab.id}
-              onClick={() => setActiveTab(tab.id as any)}
-              className={`pb-2 px-1 font-medium transition-colors ${
+              role="tab"
+              aria-selected={activeTab === tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              className={`-mb-px whitespace-nowrap border-b-2 px-1 pb-2 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:text-white ${
                 activeTab === tab.id
-                  ? 'text-primary-400 border-b-2 border-primary-400'
-                  : 'text-surface-200/50 hover:text-white'
+                  ? 'border-primary-400 text-primary-400'
+                  : 'border-transparent text-surface-200/50 hover:text-white'
               }`}
             >
               {tab.label}
@@ -183,12 +171,12 @@ const MetricsTab: React.FC<{
         <MetricCard
           label="Total Duration"
           value={`${(summary.duration_ms || 0).toLocaleString()}ms`}
-          subtext={`${((summary.duration_ms || 0) / 1000).toFixed(1)}s`}
+          detail={`${((summary.duration_ms || 0) / 1000).toFixed(1)}s`}
         />
         <MetricCard
           label="Total Tokens"
           value={summary.total_tokens.toLocaleString()}
-          subtext={
+          detail={
             cacheHits > 0
               ? `${savedTokens.toLocaleString()} saved via cache`
               : `Avg: ${Math.round(avgTokens)}/stage`
@@ -197,7 +185,7 @@ const MetricsTab: React.FC<{
         <MetricCard
           label="Total Cost"
           value={usd(totalCost)}
-          subtext={
+          detail={
             cacheHits > 0
               ? `${usd(savedCost)} saved via cache`
               : `${usd(totalCost / (summary.total_stages || 1))}/stage`
@@ -206,12 +194,12 @@ const MetricsTab: React.FC<{
         <MetricCard
           label="Stages"
           value={`${summary.completed_stages}/${summary.total_stages}`}
-          subtext={summary.failed_stages > 0 ? `${summary.failed_stages} failed` : 'All passed'}
+          detail={summary.failed_stages > 0 ? `${summary.failed_stages} failed` : 'All passed'}
         />
         <MetricCard
           label="Cache Hits"
           value={`${cacheHits}/${stages.length}`}
-          subtext={`${hitRate.toFixed(0)}% hit rate`}
+          detail={`${hitRate.toFixed(0)}% hit rate`}
         />
       </div>
 
@@ -258,15 +246,3 @@ const MetricsTab: React.FC<{
     </div>
   );
 };
-
-const MetricCard: React.FC<{ label: string; value: string; subtext: string }> = ({
-  label,
-  value,
-  subtext
-}) => (
-  <div className="bg-surface-900/60 rounded-lg p-4">
-    <p className="text-sm text-surface-200/60 mb-1">{label}</p>
-    <p className="text-2xl font-bold text-white">{value}</p>
-    <p className="text-xs text-surface-200/50 mt-1">{subtext}</p>
-  </div>
-);

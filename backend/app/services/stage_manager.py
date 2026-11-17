@@ -20,29 +20,32 @@ from backend.app.schemas.stage import (
 class StageManager:
     """Handles all stage-level business logic."""
 
-    def __init__(self, db: AsyncSession):
+    def __init__(self, db: AsyncSession, owner_id: uuid.UUID):
+        """All lookups are scoped to workflows owned by `owner_id`; anything else is a 404."""
         self.db = db
+        self.owner_id = owner_id
 
     async def _get_workflow_or_404(self, workflow_id: uuid.UUID) -> Workflow:
         """Fetch workflow or raise 404."""
         result = await self.db.execute(
-            select(Workflow).where(Workflow.id == workflow_id)
+            select(Workflow).where(Workflow.id == workflow_id, Workflow.user_id == self.owner_id)
         )
         workflow = result.scalar_one_or_none()
         if not workflow:
-            raise HTTPException(status_code=404, detail=f"Workflow {workflow_id} not found")
+            raise HTTPException(status_code=404, detail="Workflow not found")
         return workflow
 
     async def _get_stage_or_404(self, stage_id: uuid.UUID) -> Stage:
         """Fetch stage with dependencies or raise 404."""
         result = await self.db.execute(
             select(Stage)
+            .join(Workflow, Workflow.id == Stage.workflow_id)
             .options(selectinload(Stage.dependencies))
-            .where(Stage.id == stage_id)
+            .where(Stage.id == stage_id, Workflow.user_id == self.owner_id)
         )
         stage = result.scalar_one_or_none()
         if not stage:
-            raise HTTPException(status_code=404, detail=f"Stage {stage_id} not found")
+            raise HTTPException(status_code=404, detail="Stage not found")
         return stage
 
     async def create_stage(self, data: StageCreate) -> Stage:
@@ -117,8 +120,11 @@ class StageManager:
         self, stage_id: uuid.UUID, dep: StageDependencyCreate
     ) -> StageDependency:
         """Add a dependency to a stage."""
-        # Verify the depends_on stage exists
-        await self._get_stage_or_404(dep.depends_on_stage_id)
+        # The depends_on stage must be visible to this user and part of the same workflow
+        stage = await self._get_stage_or_404(stage_id)
+        depends_on = await self._get_stage_or_404(dep.depends_on_stage_id)
+        if depends_on.workflow_id != stage.workflow_id:
+            raise HTTPException(status_code=400, detail="A stage can only depend on stages of the same workflow")
 
         # Prevent self-dependency
         if stage_id == dep.depends_on_stage_id:
@@ -164,10 +170,13 @@ class StageManager:
     async def remove_dependency(self, dependency_id: uuid.UUID) -> None:
         """Remove a dependency by its ID."""
         result = await self.db.execute(
-            select(StageDependency).where(StageDependency.id == dependency_id)
+            select(StageDependency)
+            .join(Stage, Stage.id == StageDependency.stage_id)
+            .join(Workflow, Workflow.id == Stage.workflow_id)
+            .where(StageDependency.id == dependency_id, Workflow.user_id == self.owner_id)
         )
         dep = result.scalar_one_or_none()
         if not dep:
-            raise HTTPException(status_code=404, detail=f"Dependency {dependency_id} not found")
+            raise HTTPException(status_code=404, detail="Dependency not found")
         await self.db.delete(dep)
         await self.db.commit()

@@ -12,6 +12,7 @@ import { ExecutionMonitor } from '../components/ExecutionMonitor';
 import { DAGLegend, DAGVisualization } from '../components/DAGVisualization';
 import type { Stage } from '../types';
 import type { ExecutionDetailResponse, WorkflowDAG } from '../types/execution';
+import { getErrorMessage } from '../lib/errors';
 
 export default function WorkflowDetail() {
   const { id } = useParams();
@@ -28,10 +29,7 @@ export default function WorkflowDetail() {
   const finishedExecutionId = useRef<string | null>(null);
 
   const fetchStages = async () => {
-    if (!id) {
-      console.warn('fetchStages called without workflow ID');
-      return;
-    }
+    if (!id) return;
     setStagesLoading(true);
     try {
       const data = await stageApi.list(id);
@@ -61,27 +59,26 @@ export default function WorkflowDetail() {
     }
     executionApi.getDag(id)
       .then((data) => { setDag(data); setDagError(null); })
-      .catch((err) => { setDag(null); setDagError(err.response?.data?.detail || err.message); });
+      .catch((err: unknown) => { setDag(null); setDagError(getErrorMessage(err)); });
   }, [id, stages]);
 
   const loadLatestExecution = async () => {
-    if (!id) {
-      console.warn('loadLatestExecution called without workflow ID');
-      return;
-    }
+    if (!id) return;
     try {
-      const latest = await executionApi.getLatestExecution(id);
-      setExecution(latest);
-    } catch (err) {
-      // No executions yet, that's fine
-      console.log('No previous executions found');
+      setExecution(await executionApi.getLatestExecution(id));
+    } catch {
+      // No executions yet
     }
   };
 
   const handleDelete = async () => {
     if (!id || !confirm('Delete this workflow?')) return;
-    await workflowApi.delete(id);
-    navigate('/workflows');
+    try {
+      await workflowApi.delete(id);
+      navigate('/workflows');
+    } catch (err: unknown) {
+      alert(`Could not delete the workflow: ${getErrorMessage(err)}`);
+    }
   };
 
   const handleStageUpdate = () => {
@@ -96,8 +93,8 @@ export default function WorkflowDetail() {
       // Run in the background and follow it live
       const response = await executionApi.startExecution(id, { ...config, background: true });
       setLiveExecutionId(response.execution_id);
-    } catch (error: any) {
-      alert(`Execution failed: ${error.response?.data?.detail || error.message}`);
+    } catch (err: unknown) {
+      alert(`Execution failed: ${getErrorMessage(err)}`);
       setIsExecuting(false);
     }
   };
@@ -119,48 +116,41 @@ export default function WorkflowDetail() {
   }, [liveExecutionId]);
 
   // Only block the page on the first load; background refetches keep the current view mounted
-  if (loading && !workflow) return <p className="text-surface-200/50">Loading...</p>;
-  if (error) return <p className="text-red-400">Error: {error}</p>;
-  if (!id) return <p className="text-red-400">Invalid workflow ID</p>;
-  if (!workflow) return <p className="text-surface-200/50">Workflow not found.</p>;
+  if (loading && !workflow) return <p className="text-sm text-surface-200/50">Loading workflow…</p>;
+  if (error) return <p role="alert" className="text-sm text-red-400">Could not load the workflow: {error}</p>;
+  if (!id) return <p className="text-sm text-red-400">Invalid workflow ID</p>;
+  if (!workflow) return <p className="text-sm text-surface-200/50">Workflow not found.</p>;
 
   return (
     <div>
-      <Link to="/workflows" className="flex items-center gap-1 text-sm text-surface-200/50 hover:text-white mb-6 transition-colors">
-        <ArrowLeft size={16} /> Back to Workflows
+      <Link to="/workflows" className="btn btn-ghost -ml-3 mb-4">
+        <ArrowLeft size={16} aria-hidden /> Workflows
       </Link>
 
-      {/* Header */}
-      <div className="flex items-start justify-between mb-8">
-        <div>
-          <h1 className="text-3xl font-bold">{workflow.name}</h1>
-          {workflow.description && (
-            <p className="text-surface-200/50 mt-2">{workflow.description}</p>
-          )}
+      <div className="mb-8 flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+        <div className="min-w-0">
+          <h1 className="break-words text-2xl font-semibold tracking-tight">{workflow.name}</h1>
+          {workflow.description && <p className="mt-1.5 text-surface-200/60">{workflow.description}</p>}
           {workflow.objective && (
-            <p className="text-sm text-primary-400/70 mt-1">Objective: {workflow.objective}</p>
+            <p className="mt-1.5 text-sm text-surface-200/50">
+              <span className="text-surface-200/70">Objective:</span> {workflow.objective}
+            </p>
           )}
         </div>
-        <div className="flex gap-2">
+        <div className="flex shrink-0 flex-wrap gap-2">
           <button
             onClick={() => setShowExecuteModal(true)}
             disabled={isExecuting || stages.length === 0 || Boolean(dagError)}
-            className="flex items-center gap-2 px-4 py-2 bg-primary-600 hover:bg-primary-500 text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            className="btn btn-primary"
           >
-            <Play size={16} />
+            <Play size={16} aria-hidden />
             {isExecuting ? 'Executing...' : 'Execute Workflow'}
           </button>
-          <Link
-            to={`/workflows/${id}/edit`}
-            className="flex items-center gap-1.5 px-3 py-2 bg-surface-700/50 hover:bg-surface-700 rounded-lg text-sm transition-colors"
-          >
-            <Edit size={14} /> Edit
+          <Link to={`/workflows/${id}/edit`} className="btn btn-secondary">
+            <Edit size={14} aria-hidden /> Edit details
           </Link>
-          <button
-            onClick={handleDelete}
-            className="flex items-center gap-1.5 px-3 py-2 bg-red-500/10 hover:bg-red-500/20 text-red-400 rounded-lg text-sm transition-colors"
-          >
-            <Trash2 size={14} /> Delete
+          <button onClick={handleDelete} className="btn btn-danger">
+            <Trash2 size={14} aria-hidden /> Delete
           </button>
         </div>
       </div>
@@ -168,7 +158,7 @@ export default function WorkflowDetail() {
       {/* Stages */}
       <div className="mb-8">
         {stagesLoading && stages.length === 0 ? (
-          <p className="text-surface-200/50">Loading stages...</p>
+          <p className="text-sm text-surface-200/50">Loading stages…</p>
         ) : (
           <StageEditor workflowId={id!} stages={stages} onUpdate={handleStageUpdate} />
         )}
@@ -182,7 +172,7 @@ export default function WorkflowDetail() {
       ) : (dag || dagError) && (
         <div className="glass rounded-xl p-6 mb-8">
           <div className="flex flex-wrap items-baseline justify-between gap-2 mb-4">
-            <h2 className="text-xl font-semibold">Execution Plan</h2>
+            <h2 className="text-lg font-semibold">Execution Plan</h2>
             {dag && (
               <p className="text-xs text-surface-200/50">
                 {dag.levels.length} level{dag.levels.length === 1 ? '' : 's'} · up to {dag.max_width} in parallel ·

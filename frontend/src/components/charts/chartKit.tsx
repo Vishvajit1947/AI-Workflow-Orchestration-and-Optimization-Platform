@@ -79,7 +79,7 @@ export const ChartCard: React.FC<ChartCardProps> = ({
 }) => {
   const [showTable, setShowTable] = useState(false);
   return (
-    <section className={`glass rounded-xl p-5 ${className}`} aria-label={title}>
+    <section className={`glass min-w-0 rounded-xl p-5 ${className}`} aria-label={title}>
       <div className="flex items-start justify-between gap-3 mb-3">
         <div>
           <h3 className="font-semibold">{title}</h3>
@@ -122,24 +122,26 @@ export const ChartCard: React.FC<ChartCardProps> = ({
 export const DataTable: React.FC<{ headers: string[]; rows: (string | number)[][]; align?: ('left' | 'right')[] }> = ({
   headers, rows, align,
 }) => (
-  <table className="w-full text-xs">
-    <thead className="text-surface-200/50 border-b border-surface-700/60">
-      <tr>
-        {headers.map((h, i) => (
-          <th key={h} className={`px-2 py-1.5 font-medium ${align?.[i] === 'left' ? 'text-left' : 'text-right'}`}>{h}</th>
-        ))}
-      </tr>
-    </thead>
-    <tbody className="tabular-nums">
-      {rows.map((row, r) => (
-        <tr key={r} className="border-b border-surface-700/30">
-          {row.map((cell, i) => (
-            <td key={i} className={`px-2 py-1.5 ${align?.[i] === 'left' ? 'text-left' : 'text-right'}`}>{cell}</td>
+  <div className="overflow-x-auto">
+    <table className="w-full text-xs">
+      <thead className="text-surface-200/50 border-b border-surface-700/60">
+        <tr>
+          {headers.map((h, i) => (
+            <th key={h} className={`px-2 py-1.5 font-medium ${align?.[i] === 'left' ? 'text-left' : 'text-right'}`}>{h}</th>
           ))}
         </tr>
-      ))}
-    </tbody>
-  </table>
+      </thead>
+      <tbody className="tabular-nums">
+        {rows.map((row, r) => (
+          <tr key={r} className="border-b border-surface-700/30">
+            {row.map((cell, i) => (
+              <td key={i} className={`px-2 py-1.5 ${align?.[i] === 'left' ? 'text-left' : 'text-right'}`}>{cell}</td>
+            ))}
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  </div>
 );
 
 export interface TooltipRow {

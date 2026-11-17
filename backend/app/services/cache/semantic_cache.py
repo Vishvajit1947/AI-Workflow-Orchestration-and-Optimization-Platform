@@ -14,6 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from backend.app.config import settings
 from backend.app.models.cache import CacheEntry
 from backend.app.models.stage import Stage
+from backend.app.models.workflow import Workflow
 from backend.app.schemas.cache import CacheEntryResponse, CacheHitResponse
 from backend.app.services.cache.cache_validator import CacheValidator
 from backend.app.services.embedding_service import get_embedding_service
@@ -35,6 +36,7 @@ class SemanticCacheService:
         dependency_hash: Optional[str] = None,
         similarity_threshold: Optional[float] = None,
         embedding: Optional[list[float]] = None,
+        scope_workflow_id: Optional[uuid.UUID] = None,
     ) -> CacheHitResponse:
         """
         Look up a cache entry via cosine similarity search.
@@ -44,6 +46,10 @@ class SemanticCacheService:
             stage_type: Optional filter by stage type.
             dependency_hash: Optional dependency hash for validation.
             similarity_threshold: Override the default threshold.
+            scope_workflow_id: Only reuse entries from workflows with the same owner as this
+                workflow, so one user is never served another user's cached output. Workflow
+                executions always pass it (see lookup_with_validation); None searches every
+                entry and is only for callers without a workflow (tests, tooling).
 
         Returns:
             CacheHitResponse with cache_hit=True if a match is found.
@@ -75,6 +81,11 @@ class SemanticCacheService:
             query = query.where(CacheEntry.stage_type == stage_type)
         if dependency_hash:
             query = query.where(CacheEntry.dependency_hash == dependency_hash)
+        if scope_workflow_id is not None:
+            # Same owner only. An unowned workflow has user_id NULL, which equals nothing,
+            # so legacy workflows neither read nor are read by anyone's cache.
+            owner = select(Workflow.user_id).where(Workflow.id == scope_workflow_id).scalar_subquery()
+            query = query.where(CacheEntry.workflow_id.in_(select(Workflow.id).where(Workflow.user_id == owner)))
 
         result = await self.db.execute(query)
         row = result.first()
@@ -180,6 +191,7 @@ class SemanticCacheService:
                 stage_type=current_stage.stage_type,
                 similarity_threshold=similarity_threshold,
                 embedding=embedding,
+                scope_workflow_id=workflow_id,
             )
 
         dependency_hash = await self.validator.compute_dependency_hash(
@@ -192,6 +204,7 @@ class SemanticCacheService:
             dependency_hash=dependency_hash,
             similarity_threshold=similarity_threshold,
             embedding=embedding,
+            scope_workflow_id=workflow_id,
         )
 
         if result.cache_hit and result.entry:
@@ -242,9 +255,11 @@ class SemanticCacheService:
         workflow_id: Optional[uuid.UUID] = None,
         stage_id: Optional[uuid.UUID] = None,
         stage_type: Optional[str] = None,
+        owner_id: Optional[uuid.UUID] = None,
     ) -> int:
         """
         Invalidate cache entries by marking them as invalid.
+        With owner_id, only entries of that user's workflows are touched (API callers).
 
         Args:
             workflow_id: Invalidate all entries for a workflow.
@@ -266,6 +281,8 @@ class SemanticCacheService:
             query = query.where(CacheEntry.stage_id == stage_id)
         if stage_type:
             query = query.where(CacheEntry.stage_type == stage_type)
+        if owner_id is not None:
+            query = query.where(CacheEntry.workflow_id.in_(select(Workflow.id).where(Workflow.user_id == owner_id)))
 
         result = await self.db.execute(query)
         await self.db.flush()

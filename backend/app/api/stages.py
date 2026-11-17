@@ -9,6 +9,8 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.app.database import get_db
+from backend.app.core.dependencies import get_current_active_user
+from backend.app.models.user import User
 from backend.app.schemas.stage import (
     StageCreate, StageUpdate, StageRead, StageReorder,
     StageDependencyCreate, StageDependencyRead,
@@ -23,9 +25,10 @@ router = APIRouter(prefix="/stages", tags=["Stages"])
 async def create_stage(
     data: StageCreate,
     db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
 ):
     """Create a new stage in a workflow."""
-    manager = StageManager(db)
+    manager = StageManager(db, current_user.id)
     return await manager.create_stage(data)
 
 
@@ -33,9 +36,10 @@ async def create_stage(
 async def list_stages(
     workflow_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
 ):
     """List all stages for a workflow."""
-    manager = StageManager(db)
+    manager = StageManager(db, current_user.id)
     return await manager.list_stages(workflow_id)
 
 
@@ -43,9 +47,10 @@ async def list_stages(
 async def get_stage(
     stage_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
 ):
     """Get a single stage by ID."""
-    manager = StageManager(db)
+    manager = StageManager(db, current_user.id)
     return await manager.get_stage(stage_id)
 
 
@@ -54,9 +59,10 @@ async def update_stage(
     stage_id: uuid.UUID,
     data: StageUpdate,
     db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
 ):
     """Update a stage (partial update)."""
-    manager = StageManager(db)
+    manager = StageManager(db, current_user.id)
     return await manager.update_stage(stage_id, data)
 
 
@@ -64,9 +70,10 @@ async def update_stage(
 async def delete_stage(
     stage_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
 ):
     """Delete a stage."""
-    manager = StageManager(db)
+    manager = StageManager(db, current_user.id)
     await manager.delete_stage(stage_id)
     return MessageResponse(message=f"Stage {stage_id} deleted")
 
@@ -76,9 +83,10 @@ async def reorder_stages(
     workflow_id: uuid.UUID,
     data: StageReorder,
     db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
 ):
     """Reorder stages within a workflow."""
-    manager = StageManager(db)
+    manager = StageManager(db, current_user.id)
     return await manager.reorder_stages(workflow_id, data)
 
 
@@ -87,9 +95,10 @@ async def add_dependency(
     stage_id: uuid.UUID,
     data: StageDependencyCreate,
     db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
 ):
     """Add a dependency to a stage."""
-    manager = StageManager(db)
+    manager = StageManager(db, current_user.id)
     dep = await manager.add_dependency(stage_id, data)
     return dep
 
@@ -98,8 +107,9 @@ async def add_dependency(
 async def remove_dependency(
     dependency_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
 ):
     """Remove a stage dependency."""
-    manager = StageManager(db)
+    manager = StageManager(db, current_user.id)
     await manager.remove_dependency(dependency_id)
     return MessageResponse(message=f"Dependency {dependency_id} removed")

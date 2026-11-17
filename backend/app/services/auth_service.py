@@ -1,9 +1,9 @@
 """
-Authentication service: user registration, login, password reset, email verification.
+Authentication service: user registration, login, password reset.
 """
 
 import uuid
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from fastapi import HTTPException
 from sqlalchemy import select
@@ -11,7 +11,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.app.models.user import User
 from backend.app.models.password_reset import PasswordResetToken
-from backend.app.models.email_verification import EmailVerificationToken
 from backend.app.core.security import (
     hash_password,
     verify_password,
@@ -101,7 +100,7 @@ async def create_password_reset_token(db: AsyncSession, email: str) -> str | Non
     # Generate token
     plain_token = generate_secure_token(32)
     token_hash_value = hash_token(plain_token)
-    expires_at = datetime.utcnow() + timedelta(
+    expires_at = datetime.now(timezone.utc) + timedelta(
         minutes=settings.PASSWORD_RESET_EXPIRE_MINUTES
     )
 
@@ -136,7 +135,7 @@ async def verify_reset_token(db: AsyncSession, token: str) -> User | None:
     if reset_token.used:
         return None
 
-    if reset_token.expires_at < datetime.utcnow():
+    if reset_token.expires_at < datetime.now(timezone.utc):
         return None
 
     # Load user
@@ -180,60 +179,3 @@ async def reset_password(db: AsyncSession, token: str, new_password: str) -> boo
 
     return True
 
-
-async def create_verification_token(db: AsyncSession, user_id: uuid.UUID) -> str:
-    """
-    Create an email verification token for a user.
-    Returns the plain token to be sent in the verification email.
-    """
-    plain_token = generate_secure_token(32)
-    token_hash_value = hash_token(plain_token)
-    expires_at = datetime.utcnow() + timedelta(
-        hours=settings.EMAIL_VERIFICATION_EXPIRE_HOURS
-    )
-
-    verification_token = EmailVerificationToken(
-        user_id=user_id,
-        token_hash=token_hash_value,
-        expires_at=expires_at,
-        used=False,
-    )
-    db.add(verification_token)
-    await db.flush()
-
-    return plain_token
-
-
-async def verify_email(db: AsyncSession, token: str) -> bool:
-    """
-    Verify a user's email using a verification token.
-    Returns True on success, False if token is invalid, expired, or already used.
-    """
-    token_hash_value = hash_token(token)
-
-    stmt = select(EmailVerificationToken).where(
-        EmailVerificationToken.token_hash == token_hash_value
-    )
-    result = await db.execute(stmt)
-    verification_token = result.scalar_one_or_none()
-
-    if not verification_token:
-        return False
-
-    if verification_token.used:
-        return False
-
-    if verification_token.expires_at < datetime.utcnow():
-        return False
-
-    # Mark token as used and verify user email
-    verification_token.used = True
-
-    stmt = select(User).where(User.id == verification_token.user_id)
-    result = await db.execute(stmt)
-    user = result.scalar_one()
-    user.is_email_verified = True
-
-    await db.flush()
-
-    return True

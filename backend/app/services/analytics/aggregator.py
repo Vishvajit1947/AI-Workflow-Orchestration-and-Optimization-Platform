@@ -20,6 +20,7 @@ from backend.app.models.cache import CacheEntry
 from backend.app.models.execution import ExecutionRecord
 from backend.app.models.routing_rule import RoutingDecision
 from backend.app.models.stage import Stage
+from backend.app.models.workflow import Workflow
 
 DEFAULT_TREND_DAYS = 30
 MAX_TREND_DAYS = 366
@@ -31,9 +32,17 @@ class AnalyticsFilter:
     start_date: Optional[datetime] = None
     end_date: Optional[datetime] = None
     workflow_id: Optional[uuid.UUID] = None
+    # Restricts every metric to this user's workflows. The API always sets it; None
+    # (all users) is only for internal callers such as tests.
+    owner_id: Optional[uuid.UUID] = None
+
+    def owned_workflows(self):
+        return select(Workflow.id).where(Workflow.user_id == self.owner_id)
 
     def conditions(self) -> list:
         conds = []
+        if self.owner_id is not None:
+            conds.append(ExecutionRecord.workflow_id.in_(self.owned_workflows()))
         if self.workflow_id:
             conds.append(ExecutionRecord.workflow_id == self.workflow_id)
         if self.start_date:
@@ -207,6 +216,8 @@ class AnalyticsAggregator:
         )).one()
 
         entries_query = select(func.count(CacheEntry.id)).where(CacheEntry.is_valid.is_(True))
+        if flt.owner_id is not None:
+            entries_query = entries_query.where(CacheEntry.workflow_id.in_(flt.owned_workflows()))
         if flt.workflow_id:
             entries_query = entries_query.where(CacheEntry.workflow_id == flt.workflow_id)
         valid_entries = await self.db.scalar(entries_query) or 0
@@ -261,7 +272,7 @@ class AnalyticsAggregator:
         """Run a per-UTC-day aggregate over [start, end]; returns (all days, {day: row})."""
         start, end = self._trend_range(flt, days)
         day = func.date(func.timezone("UTC", ExecutionRecord.created_at)).label("day")
-        conds = AnalyticsFilter(workflow_id=flt.workflow_id).conditions()  # dates handled by the day range
+        conds = AnalyticsFilter(workflow_id=flt.workflow_id, owner_id=flt.owner_id).conditions()  # dates handled by the day range
         rows = (await self.db.execute(
             select(day, *columns)
             .where(day >= start, day <= end, *conds)
@@ -317,19 +328,23 @@ class AnalyticsAggregator:
             conds.append(RoutingDecision.created_at <= flt.end_date)
         if flt.workflow_id:
             conds.append(Stage.workflow_id == flt.workflow_id)
+        if flt.owner_id is not None:
+            conds.append(Stage.workflow_id.in_(flt.owned_workflows()))
+        # Decisions are tied to a workflow only through their stage
+        join_stage = bool(flt.workflow_id) or flt.owner_id is not None
 
         base = select(
             func.count(RoutingDecision.id).label("total"),
             _count_if(RoutingDecision.was_user_override.is_(True)).label("overrides"),
             _count_if(RoutingDecision.was_fallback.is_(True)).label("fallbacks"),
         ).select_from(RoutingDecision)
-        if flt.workflow_id:
+        if join_stage:
             base = base.join(Stage, Stage.id == RoutingDecision.stage_id)
         row = (await self.db.execute(base.where(*conds))).one()
 
         def grouped(column):
             q = select(column, func.count(RoutingDecision.id).label("n")).select_from(RoutingDecision)
-            if flt.workflow_id:
+            if join_stage:
                 q = q.join(Stage, Stage.id == RoutingDecision.stage_id)
             return q.where(column.isnot(None), *conds).group_by(column).order_by(literal_column("n").desc())
 
@@ -347,12 +362,17 @@ class AnalyticsAggregator:
 
     # ---------- one execution ----------
 
-    async def get_execution_timeline(self, execution_id: uuid.UUID) -> Optional[dict]:
+    async def get_execution_timeline(
+        self, execution_id: uuid.UUID, owner_id: Optional[uuid.UUID] = None
+    ) -> Optional[dict]:
         """Stage runs of one execution with offsets from its start, for a Gantt chart."""
+        conds = [ExecutionRecord.execution_id == execution_id]
+        if owner_id is not None:
+            conds.extend(AnalyticsFilter(owner_id=owner_id).conditions())
         rows = (await self.db.execute(
             select(ExecutionRecord, Stage.name, Stage.stage_order, Stage.stage_type)
             .outerjoin(Stage, Stage.id == ExecutionRecord.stage_id)
-            .where(ExecutionRecord.execution_id == execution_id)
+            .where(*conds)
             .order_by(ExecutionRecord.started_at, Stage.stage_order)
         )).all()
         if not rows:

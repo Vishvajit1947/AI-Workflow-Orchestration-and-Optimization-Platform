@@ -1,14 +1,20 @@
+/**
+ * Home page: describe an objective, let the AI planner propose a workflow, then review it.
+ */
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { Sparkles, Loader2, FileText } from 'lucide-react';
+import { Link, useNavigate } from 'react-router-dom';
+import { Sparkles, Loader2 } from 'lucide-react';
 import { plannerApi, type ObjectiveAnalysisResponse } from '../api/plannerApi';
 import PlanReview from '../components/PlanReview';
+import { getErrorMessage } from '../lib/errors';
+
+const MAX_OBJECTIVE_LENGTH = 5000; // matches the planner API limit
 
 const EXAMPLE_OBJECTIVES = [
-  "Design a machine learning pipeline for retail demand forecasting.",
-  "Build a REST API for a task management application with authentication.",
-  "Create a comprehensive documentation system for an open-source project.",
-  "Develop a data processing workflow for customer analytics.",
+  'Design a machine learning pipeline for retail demand forecasting.',
+  'Build a REST API for a task management application with authentication.',
+  'Create a documentation system for an open-source project.',
+  'Develop a data processing workflow for customer analytics.',
 ];
 
 export default function ObjectiveInput() {
@@ -23,35 +29,15 @@ export default function ObjectiveInput() {
       setError('Please enter an objective');
       return;
     }
-
     setAnalyzing(true);
     setError(null);
-
     try {
-      const result = await plannerApi.analyzeObjective(objective.trim());
-      setPlan(result);
-    } catch (err: any) {
-      console.error('Analysis failed:', err);
-      const detail = err.response?.data?.detail;
-      // FastAPI validation errors (422) arrive as a list of objects, not a string
-      setError(
-        Array.isArray(detail)
-          ? detail.map((d: any) => d.msg).join('; ')
-          : (typeof detail === 'string' && detail) ||
-            'Failed to analyze objective. Please check your provider configuration and try again.'
-      );
+      setPlan(await plannerApi.analyzeObjective(objective.trim()));
+    } catch (err: unknown) {
+      setError(getErrorMessage(err, 'Failed to analyze the objective. Check the LLM provider configuration and try again.'));
     } finally {
       setAnalyzing(false);
     }
-  };
-
-  const handlePlanApproved = (workflowId: string) => {
-    // Navigate to the newly created workflow
-    navigate(`/workflows/${workflowId}`);
-  };
-
-  const handleEditManually = () => {
-    navigate('/workflows/new');
   };
 
   if (plan) {
@@ -59,111 +45,87 @@ export default function ObjectiveInput() {
       <PlanReview
         objective={objective}
         plan={plan}
-        onApproved={handlePlanApproved}
+        onApproved={(workflowId) => navigate(`/workflows/${workflowId}`)}
         onBack={() => setPlan(null)}
       />
     );
   }
 
   return (
-    <div className="max-w-4xl mx-auto">
-      {/* Header */}
-      <div className="text-center mb-12">
-        <div className="flex justify-center mb-4">
-          <div className="p-3 bg-primary-600/10 rounded-2xl">
-            <Sparkles size={32} className="text-primary-400" />
-          </div>
-        </div>
-        <h1 className="text-4xl font-bold mb-3">What do you want to accomplish?</h1>
-        <p className="text-lg text-surface-200/60">
-          Describe your goal and let AI plan the workflow for you
+    <div className="mx-auto max-w-3xl">
+      <div className="mb-8">
+        <h1 className="text-2xl font-semibold tracking-tight">What do you want to accomplish?</h1>
+        <p className="mt-1 text-sm text-surface-200/50">
+          Describe your goal. The AI planner proposes a workflow of stages for you to review before anything runs.
         </p>
       </div>
 
-      {/* Main Input */}
-      <div className="glass rounded-xl p-8 mb-8">
-        <label className="block text-sm font-medium text-surface-200/70 mb-3">
-          Your Objective
+      <div className="glass rounded-xl p-5 sm:p-6">
+        <label htmlFor="objective" className="mb-2 block text-sm font-medium text-surface-200/80">
+          Objective
         </label>
         <textarea
+          id="objective"
           value={objective}
           onChange={(e) => setObjective(e.target.value)}
           onKeyDown={(e) => {
-            if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
-              handleAnalyze();
-            }
+            if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) handleAnalyze();
           }}
-          placeholder="Example: Design a machine learning pipeline for retail demand forecasting with data preprocessing, feature engineering, model selection, and evaluation stages."
+          placeholder="e.g. Design a machine learning pipeline for retail demand forecasting, covering data preparation, feature engineering, model selection and evaluation."
           rows={6}
-          className="w-full px-4 py-3 bg-surface-800/50 border border-surface-700/50 rounded-lg text-white placeholder:text-surface-200/30 focus:outline-none focus:border-primary-500/50 transition-colors resize-none"
+          maxLength={MAX_OBJECTIVE_LENGTH}
+          className="input resize-none px-4 py-3 text-base"
           disabled={analyzing}
+          aria-describedby="objective-meta"
         />
-        
-        <div className="flex items-center justify-between mt-4">
-          <span className="text-xs text-surface-200/40">
-            {objective.length} / 5000 characters
-          </span>
-          <span className="text-xs text-surface-200/40">
-            Tip: Press Ctrl+Enter to analyze
-          </span>
+        <div id="objective-meta" className="mt-2 flex justify-between text-xs text-surface-200/40">
+          <span>{objective.length.toLocaleString()} / {MAX_OBJECTIVE_LENGTH.toLocaleString()}</span>
+          <span className="hidden sm:inline">Ctrl+Enter to plan</span>
         </div>
 
         {error && (
-          <div className="mt-4 p-4 bg-red-500/10 border border-red-500/30 rounded-lg">
-            <p className="text-sm text-red-400">{error}</p>
-          </div>
+          <p role="alert" className="mt-4 rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-400">
+            {error}
+          </p>
         )}
 
-        <button
-          onClick={handleAnalyze}
-          disabled={analyzing || !objective.trim()}
-          className="w-full mt-6 flex items-center justify-center gap-2 px-6 py-3.5 bg-primary-600 hover:bg-primary-500 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg text-base font-medium transition-all shadow-lg shadow-primary-600/25"
-        >
+        <button onClick={handleAnalyze} disabled={analyzing || !objective.trim()} className="btn btn-primary mt-5 w-full py-3 text-base">
           {analyzing ? (
             <>
-              <Loader2 size={20} className="animate-spin" />
-              Analyzing Objective...
+              <Loader2 size={18} className="animate-spin" aria-hidden />
+              Planning workflow…
             </>
           ) : (
             <>
-              <Sparkles size={20} />
-              Analyze Task
+              <Sparkles size={18} aria-hidden />
+              Plan workflow
             </>
           )}
         </button>
       </div>
 
-      {/* Examples */}
-      <div className="glass rounded-xl p-6">
-        <h3 className="text-sm font-medium text-surface-200/70 mb-4">Example Objectives</h3>
-        <div className="grid gap-3">
-          {EXAMPLE_OBJECTIVES.map((example, idx) => (
+      <div className="mt-6">
+        <h2 className="mb-3 text-xs font-medium uppercase tracking-wider text-surface-200/40">Try an example</h2>
+        <div className="grid gap-2 sm:grid-cols-2">
+          {EXAMPLE_OBJECTIVES.map((example) => (
             <button
-              key={idx}
+              key={example}
               onClick={() => setObjective(example)}
               disabled={analyzing}
-              className="text-left px-4 py-3 bg-surface-800/30 hover:bg-surface-800/50 border border-surface-700/30 hover:border-primary-500/30 rounded-lg transition-all group disabled:opacity-50 disabled:cursor-not-allowed"
+              className="rounded-lg border border-surface-700/60 bg-surface-800/40 px-3.5 py-2.5 text-left text-sm text-surface-200/70 transition-colors hover:border-primary-500/40 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-400/60 disabled:opacity-50"
             >
-              <p className="text-sm text-surface-200/80 group-hover:text-white transition-colors">
-                {example}
-              </p>
+              {example}
             </button>
           ))}
         </div>
       </div>
 
-      {/* Advanced Option */}
-      <div className="text-center mt-8">
-        <button
-          onClick={handleEditManually}
-          disabled={analyzing}
-          className="inline-flex items-center gap-2 text-sm text-surface-200/50 hover:text-primary-400 transition-colors disabled:opacity-50"
-        >
-          <FileText size={16} />
-          Or create workflow manually (Advanced)
-        </button>
-      </div>
+      <p className="mt-8 text-center text-sm text-surface-200/50">
+        Prefer to define the stages yourself?{' '}
+        <Link to="/workflows/new" className="font-medium text-primary-400 hover:text-primary-300">
+          Create a workflow manually
+        </Link>
+      </p>
     </div>
   );
 }
-

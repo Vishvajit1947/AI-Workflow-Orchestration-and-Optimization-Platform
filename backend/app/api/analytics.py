@@ -11,7 +11,9 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from backend.app.core.dependencies import get_current_active_user
 from backend.app.database import get_db
+from backend.app.models.user import User
 from backend.app.schemas.analytics import (
     CacheMetrics, CostTrendPoint, ExecutionTimeline, LatencyMetrics, ModelUtilization,
     RoutingEffectiveness, StageTypeMetrics, TokenTrendPoint, WorkflowMetrics,
@@ -25,13 +27,15 @@ router = APIRouter(prefix="/analytics", tags=["analytics"])
 def date_filter(
     start_date: Optional[datetime] = Query(None, description="Include records created at or after this time"),
     end_date: Optional[datetime] = Query(None, description="Include records created at or before this time"),
+    current_user: User = Depends(get_current_active_user),
 ) -> AnalyticsFilter:
+    """Date range, always scoped to the caller's own workflows."""
     def aware(dt: Optional[datetime]) -> Optional[datetime]:
         return dt.replace(tzinfo=timezone.utc) if dt and dt.tzinfo is None else dt  # naive = UTC
     start, end = aware(start_date), aware(end_date)
     if start and end and start > end:
         raise HTTPException(status_code=422, detail="start_date must be before end_date")
-    return AnalyticsFilter(start_date=start, end_date=end)
+    return AnalyticsFilter(start_date=start, end_date=end, owner_id=current_user.id)
 
 
 def analytics_filter(
@@ -96,11 +100,15 @@ async def get_routing_effectiveness(flt: AnalyticsFilter = Depends(analytics_fil
 
 
 @router.get("/timeline/{execution_id}", response_model=ExecutionTimeline)
-async def get_execution_timeline(execution_id: uuid.UUID, db: AsyncSession = Depends(get_db)):
+async def get_execution_timeline(
+    execution_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+):
     """Stage runs of one execution with start/end offsets, for a Gantt chart."""
-    timeline = await AnalyticsAggregator(db).get_execution_timeline(execution_id)
+    timeline = await AnalyticsAggregator(db).get_execution_timeline(execution_id, owner_id=current_user.id)
     if timeline is None:
-        raise HTTPException(status_code=404, detail=f"Execution {execution_id} not found")
+        raise HTTPException(status_code=404, detail="Execution not found")
     return timeline
 
 

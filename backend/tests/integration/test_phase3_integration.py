@@ -241,9 +241,13 @@ async def test_cache_tracks_hit_count(db_session: AsyncSession, semantic_embeddi
 async def test_cache_hit_rate_calculation(db_session: AsyncSession, client, semantic_embeddings):
     """3 entries (3 misses) + 9 hits → 9 / 12 = 75%, via both SQL and the stats API."""
     cache_service = SemanticCacheService(db_session)
+    workflow = Workflow(name="Cache stats")  # owned by the signed-in test user
+    db_session.add(workflow)
+    await db_session.flush()
     queries = ["Summarise the user requirements", "Draw the system architecture", "Write unit tests for the API"]
     for i, q in enumerate(queries):
-        await cache_service.store(input_text=q, result=f"Result {i}", stage_type="analysis", result_tokens=100)
+        await cache_service.store(input_text=q, result=f"Result {i}", stage_type="analysis", result_tokens=100,
+                                  workflow_id=workflow.id)
     await db_session.commit()
 
     for q in queries:

@@ -6,9 +6,14 @@ import asyncio
 import uuid
 
 import pytest
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy.pool import NullPool
 from starlette.testclient import TestClient
 
+from backend.app.database import get_session_factory
 from backend.app.main import app
+from backend.app.models import ExecutionRecord, Workflow
+from backend.tests.conftest import TEST_DATABASE_URL
 from backend.app.services.execution import ExecutionEngine
 from backend.app.services.execution.tracker import tracker
 from backend.app.services.websocket.execution_ws import ConnectionManager, manager
@@ -31,24 +36,54 @@ class FakeSocket:
         self.sent.append(message)
 
 
-# ---------- endpoint (real WebSocket transport; no lifespan, no DB) ----------
+# ---------- endpoint (real WebSocket transport, authenticated against the test DB) ----------
 
-def test_unknown_execution_and_heartbeat():
-    with TestClient(app).websocket_connect(f"/ws/executions/{uuid.uuid4()}") as ws:
+@pytest.fixture
+def ws_app():
+    """
+    The endpoint authenticates through get_session_factory. TestClient runs the app in its
+    own event loop, so the override builds an engine there (asyncpg connections are loop-bound).
+    """
+    def factory():
+        return async_sessionmaker(create_async_engine(TEST_DATABASE_URL, poolclass=NullPool), expire_on_commit=False)
+
+    app.dependency_overrides[get_session_factory] = factory
+    yield app
+    app.dependency_overrides.pop(get_session_factory, None)
+
+
+def ws_connect(execution_id, token: str | None):
+    headers = {"cookie": f"session_token={token}"} if token else {}
+    return TestClient(app).websocket_connect(f"/ws/executions/{execution_id}", headers=headers)
+
+
+async def test_owned_finished_execution_and_heartbeat(ws_app, db_session, test_user):
+    # An execution of the user's workflow that this server no longer holds in memory
+    workflow = Workflow(name="WS")
+    db_session.add(workflow)
+    await db_session.flush()
+    execution_id = uuid.uuid4()
+    db_session.add(ExecutionRecord(workflow_id=workflow.id, execution_id=execution_id, status="completed"))
+    await db_session.commit()
+
+    with ws_connect(execution_id, test_user.session_token) as ws:
         assert ws.receive_json()["type"] == "unknown_execution"
         ws.send_text("ping")
         assert ws.receive_json() == {"type": "pong"}
 
 
-def test_snapshot_sent_on_connect():
+async def test_snapshot_sent_on_connect(ws_app, db_session, test_user):
+    workflow = Workflow(name="WS live")
+    db_session.add(workflow)
+    await db_session.commit()
     execution_id = uuid.uuid4()
-    live = tracker.register(execution_id, uuid.uuid4(), "WF")
+    live = tracker.register(execution_id, workflow.id, "WF")
     live.status = "running"
     live.stages = {"s1": {"stage_id": str(uuid.uuid4()), "name": "A", "stage_order": 0, "stage_type": None,
                           "level": 0, "status": "running", "provider": "openai", "model": "gpt-4o-mini",
                           "cache_hit": False, "error": None, "started_at": None, "completed_at": None}}
 
-    with TestClient(app).websocket_connect(f"/ws/executions/{execution_id}") as ws:
+    with ws_connect(execution_id, test_user.session_token) as ws:
         snapshot = ws.receive_json()
         assert snapshot["type"] == "snapshot"
         assert snapshot["status"] == "running"

@@ -1,7 +1,12 @@
-import { useState, useEffect } from 'react';
+/**
+ * Create a workflow manually, or edit a workflow's name, description and objective.
+ * Stages are managed on the workflow page.
+ */
+import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { Save, ArrowLeft } from 'lucide-react';
 import { workflowApi } from '../lib/workflows';
+import { getErrorMessage } from '../lib/errors';
 import type { WorkflowCreate } from '../types';
 
 export default function WorkflowEditor() {
@@ -9,23 +14,23 @@ export default function WorkflowEditor() {
   const isEditing = Boolean(id);
   const navigate = useNavigate();
   const [saving, setSaving] = useState(false);
-  const [form, setForm] = useState<WorkflowCreate>({
-    name: '',
-    description: '',
-    objective: '',
-  });
+  const [loading, setLoading] = useState(isEditing);
+  const [error, setError] = useState<string | null>(null);
+  const [form, setForm] = useState<WorkflowCreate>({ name: '', description: '', objective: '' });
 
   useEffect(() => {
-    if (id) {
-      workflowApi.get(id).then(w => {
-        setForm({ name: w.name, description: w.description || '', objective: w.objective || '' });
-      });
-    }
+    if (!id) return;
+    workflowApi
+      .get(id)
+      .then((w) => setForm({ name: w.name, description: w.description || '', objective: w.objective || '' }))
+      .catch((err: unknown) => setError(`Could not load the workflow: ${getErrorMessage(err)}`))
+      .finally(() => setLoading(false));
   }, [id]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setSaving(true);
+    setError(null);
     try {
       if (isEditing && id) {
         await workflowApi.update(id, form);
@@ -34,8 +39,8 @@ export default function WorkflowEditor() {
         const created = await workflowApi.create(form);
         navigate(`/workflows/${created.id}`);
       }
-    } catch (err) {
-      console.error(err);
+    } catch (err: unknown) {
+      setError(`Could not save the workflow: ${getErrorMessage(err)}`);
     } finally {
       setSaving(false);
     }
@@ -43,56 +48,76 @@ export default function WorkflowEditor() {
 
   return (
     <div className="max-w-2xl">
-      <button onClick={() => navigate(-1)} className="flex items-center gap-1 text-sm text-surface-200/50 hover:text-white mb-6 transition-colors">
-        <ArrowLeft size={16} /> Back
+      <button onClick={() => navigate(-1)} className="btn btn-ghost -ml-3 mb-4">
+        <ArrowLeft size={16} aria-hidden /> Back
       </button>
 
-      <h1 className="text-2xl font-bold mb-6">{isEditing ? 'Edit Workflow' : 'Create Workflow'}</h1>
+      <h1 className="text-2xl font-semibold tracking-tight">{isEditing ? 'Edit workflow' : 'Create a workflow manually'}</h1>
+      <p className="mb-6 mt-1 text-sm text-surface-200/50">
+        {isEditing
+          ? 'Update the workflow details. Stages are edited on the workflow page.'
+          : 'Name the workflow, then add its stages on the next page.'}
+      </p>
 
-      <form onSubmit={handleSubmit} className="space-y-6">
-        <div>
-          <label className="block text-sm font-medium text-surface-200/70 mb-2">Name *</label>
-          <input
-            type="text"
-            required
-            value={form.name}
-            onChange={(e) => setForm({ ...form, name: e.target.value })}
-            className="w-full px-4 py-2.5 bg-surface-800/50 border border-surface-700/50 rounded-lg text-white focus:outline-none focus:border-primary-500/50 transition-colors"
-            placeholder="e.g., Software Development Workflow"
-          />
-        </div>
+      {error && (
+        <p role="alert" className="mb-6 rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-400">
+          {error}
+        </p>
+      )}
 
-        <div>
-          <label className="block text-sm font-medium text-surface-200/70 mb-2">Description</label>
-          <textarea
-            value={form.description}
-            onChange={(e) => setForm({ ...form, description: e.target.value })}
-            rows={3}
-            className="w-full px-4 py-2.5 bg-surface-800/50 border border-surface-700/50 rounded-lg text-white focus:outline-none focus:border-primary-500/50 transition-colors resize-none"
-            placeholder="Describe what this workflow does..."
-          />
-        </div>
+      {loading ? (
+        <p className="text-sm text-surface-200/50">Loading workflow…</p>
+      ) : (
+        <form onSubmit={handleSubmit} className="space-y-5">
+          <div>
+            <label htmlFor="wf-name" className="mb-1.5 block text-sm font-medium text-surface-200/80">
+              Name <span className="text-red-400" aria-hidden>*</span>
+            </label>
+            <input
+              id="wf-name"
+              type="text"
+              required
+              value={form.name}
+              onChange={(e) => setForm({ ...form, name: e.target.value })}
+              className="input px-4 py-2.5"
+              placeholder="e.g. Software development workflow"
+            />
+          </div>
 
-        <div>
-          <label className="block text-sm font-medium text-surface-200/70 mb-2">Objective</label>
-          <textarea
-            value={form.objective}
-            onChange={(e) => setForm({ ...form, objective: e.target.value })}
-            rows={3}
-            className="w-full px-4 py-2.5 bg-surface-800/50 border border-surface-700/50 rounded-lg text-white focus:outline-none focus:border-primary-500/50 transition-colors resize-none"
-            placeholder="e.g., Build an online course management system"
-          />
-        </div>
+          <div>
+            <label htmlFor="wf-description" className="mb-1.5 block text-sm font-medium text-surface-200/80">
+              Description
+            </label>
+            <textarea
+              id="wf-description"
+              value={form.description}
+              onChange={(e) => setForm({ ...form, description: e.target.value })}
+              rows={3}
+              className="input resize-none px-4 py-2.5"
+              placeholder="What this workflow does"
+            />
+          </div>
 
-        <button
-          type="submit"
-          disabled={saving || !form.name}
-          className="flex items-center gap-2 px-6 py-2.5 bg-primary-600 hover:bg-primary-500 disabled:opacity-50 rounded-lg text-sm font-medium transition-all shadow-lg shadow-primary-600/25"
-        >
-          <Save size={16} />
-          {saving ? 'Saving...' : (isEditing ? 'Update Workflow' : 'Create Workflow')}
-        </button>
-      </form>
+          <div>
+            <label htmlFor="wf-objective" className="mb-1.5 block text-sm font-medium text-surface-200/80">
+              Objective
+            </label>
+            <textarea
+              id="wf-objective"
+              value={form.objective}
+              onChange={(e) => setForm({ ...form, objective: e.target.value })}
+              rows={3}
+              className="input resize-none px-4 py-2.5"
+              placeholder="e.g. Build an online course management system"
+            />
+          </div>
+
+          <button type="submit" disabled={saving || !form.name} className="btn btn-primary px-5 py-2.5">
+            <Save size={16} aria-hidden />
+            {saving ? 'Saving…' : isEditing ? 'Save changes' : 'Create workflow'}
+          </button>
+        </form>
+      )}
     </div>
   );
 }

@@ -9,7 +9,10 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select, func, Float
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from backend.app.core.dependencies import get_current_active_user
+from backend.app.core.ownership import get_owned_workflow, owned_workflow_ids, not_found
 from backend.app.database import get_db
+from backend.app.models.user import User
 from backend.app.models.cache import CacheEntry
 from backend.app.models.execution import ExecutionRecord
 from backend.app.models.workflow import Workflow
@@ -38,9 +41,10 @@ async def list_cache_entries(
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
     db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
 ):
-    """List cache entries with optional filters, newest first."""
-    query = select(CacheEntry)
+    """List the caller's cache entries with optional filters, newest first."""
+    query = select(CacheEntry).where(CacheEntry.workflow_id.in_(owned_workflow_ids(current_user.id)))
 
     if workflow_id:
         query = query.where(CacheEntry.workflow_id == workflow_id)
@@ -61,9 +65,10 @@ async def list_cache_entries(
 async def get_cache_stats(
     workflow_id: Optional[uuid.UUID] = Query(None, description="Filter by workflow"),
     db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
 ):
     """
-    Cache performance statistics.
+    Cache performance statistics for the caller's workflows.
 
     total_entries counts currently valid entries. Hits, tokens and cost saved
     include invalidated entries, since those savings already happened.
@@ -79,6 +84,10 @@ async def get_cache_stats(
     similarity_query = select(
         func.avg(ExecutionRecord.metadata_["similarity_score"].astext.cast(Float))
     ).where(ExecutionRecord.cache_hit == True)
+
+    owned = owned_workflow_ids(current_user.id)
+    entry_query = entry_query.where(CacheEntry.workflow_id.in_(owned))
+    similarity_query = similarity_query.where(ExecutionRecord.workflow_id.in_(owned))
 
     if workflow_id:
         entry_query = entry_query.where(CacheEntry.workflow_id == workflow_id)
@@ -101,11 +110,17 @@ async def get_cache_stats(
 async def delete_cache_entry(
     entry_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
 ):
     """Permanently delete a specific cache entry."""
-    entry = await db.get(CacheEntry, entry_id)
+    entry = (await db.execute(
+        select(CacheEntry).where(
+            CacheEntry.id == entry_id,
+            CacheEntry.workflow_id.in_(owned_workflow_ids(current_user.id)),
+        )
+    )).scalar_one_or_none()
     if not entry:
-        raise HTTPException(status_code=404, detail=f"Cache entry {entry_id} not found")
+        raise not_found("Cache entry")
 
     await db.delete(entry)
     await db.commit()
@@ -119,11 +134,14 @@ async def clear_cache(
     stage_id: Optional[uuid.UUID] = Query(None),
     stage_type: Optional[str] = Query(None),
     db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
 ):
-    """Invalidate cache entries by workflow, stage, stage type, or all when no filter is given."""
+    """Invalidate the caller's cache entries by workflow, stage, stage type, or all of them."""
+    if workflow_id:
+        await get_owned_workflow(db, workflow_id, current_user.id)
     cache_service = SemanticCacheService(db)
     count = await cache_service.invalidate(
-        workflow_id=workflow_id, stage_id=stage_id, stage_type=stage_type
+        workflow_id=workflow_id, stage_id=stage_id, stage_type=stage_type, owner_id=current_user.id
     )
     await db.commit()
 
@@ -137,10 +155,13 @@ async def clear_cache(
 
 
 @router.post("/cleanup-expired")
-async def cleanup_expired_cache(db: AsyncSession = Depends(get_db)):
-    """Invalidate cache entries whose TTL has passed."""
+async def cleanup_expired_cache(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+):
+    """Invalidate the caller's cache entries whose TTL has passed."""
     validator = CacheValidator(db)
-    count = await validator.cleanup_expired_entries()
+    count = await validator.cleanup_expired_entries(owner_id=current_user.id)
     await db.commit()
 
     return {"message": "Expired cache entries cleaned up", "entries_cleaned": count}
@@ -148,12 +169,10 @@ async def cleanup_expired_cache(db: AsyncSession = Depends(get_db)):
 
 async def _run_for_cache(
     workflow_id: uuid.UUID, request: ExecutionStartRequest, db: AsyncSession,
-    use_cache: bool,
+    use_cache: bool, user: User,
 ) -> tuple[uuid.UUID, int, int]:
     """Execute a workflow and return (execution_id, stages served from cache, stages run by LLM)."""
-    workflow = await db.get(Workflow, workflow_id)
-    if not workflow:
-        raise HTTPException(status_code=404, detail=f"Workflow {workflow_id} not found")
+    workflow = await get_owned_workflow(db, workflow_id, user.id)
     if workflow.status == "running":
         raise HTTPException(status_code=409, detail="Workflow is already running")
 
@@ -187,13 +206,14 @@ async def warm_cache(
     workflow_id: uuid.UUID = Query(..., description="Workflow to pre-warm"),
     request: ExecutionStartRequest = ExecutionStartRequest(),
     db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
 ):
     """
     Pre-warm the cache by executing the workflow once.
     Stages already cached are served from cache; the rest are run and stored,
     so subsequent executions hit the cache.
     """
-    execution_id, cached, executed = await _run_for_cache(workflow_id, request, db, use_cache=True)
+    execution_id, cached, executed = await _run_for_cache(workflow_id, request, db, use_cache=True, user=current_user)
     return {
         "message": "Cache warmed",
         "workflow_id": workflow_id,
@@ -208,16 +228,16 @@ async def refresh_workflow_cache(
     workflow_id: uuid.UUID,
     request: ExecutionStartRequest = ExecutionStartRequest(),
     db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
 ):
     """
     Force a cache refresh for a workflow: invalidate its entries, then
     re-execute every stage with the LLM and store fresh results.
     """
-    if not await db.get(Workflow, workflow_id):
-        raise HTTPException(status_code=404, detail=f"Workflow {workflow_id} not found")
+    await get_owned_workflow(db, workflow_id, current_user.id)
 
-    invalidated = await SemanticCacheService(db).invalidate(workflow_id=workflow_id)
-    execution_id, _, executed = await _run_for_cache(workflow_id, request, db, use_cache=False)
+    invalidated = await SemanticCacheService(db).invalidate(workflow_id=workflow_id, owner_id=current_user.id)
+    execution_id, _, executed = await _run_for_cache(workflow_id, request, db, use_cache=False, user=current_user)
     return {
         "message": "Cache refreshed",
         "workflow_id": workflow_id,
@@ -231,8 +251,10 @@ async def refresh_workflow_cache(
 async def get_workflow_cache_hit_rate(
     workflow_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
 ):
     """Cache hit rate for a specific workflow."""
+    await get_owned_workflow(db, workflow_id, current_user.id)
     result = await db.execute(
         select(func.count(CacheEntry.id), func.coalesce(func.sum(CacheEntry.hit_count), 0))
         .where(CacheEntry.workflow_id == workflow_id)

@@ -7,9 +7,13 @@ import { ChevronDown, ChevronRight, RefreshCw } from 'lucide-react';
 import { executionApi } from '../api/executionApi';
 import type { ExecutionListItem } from '../types/execution';
 import { formatDuration, formatUSD } from '../lib/format';
+import { getErrorMessage } from '../lib/errors';
 import { ExecutionTimelineView } from '../components/charts/TimelineChart';
+import { PageHeader } from '../components/ui/PageHeader';
+import { StatusBadge } from '../components/ui/StatusBadge';
 
 const PAGE_SIZE = 25;
+const COLUMN_COUNT = 7;
 
 export default function ExecutionsPage() {
   const [items, setItems] = useState<ExecutionListItem[]>([]);
@@ -25,8 +29,8 @@ export default function ExecutionsPage() {
     try {
       setItems(await executionApi.listExecutions(undefined, PAGE_SIZE, page * PAGE_SIZE));
       setError(null);
-    } catch (err: any) {
-      setError(err.response?.data?.detail || err.message);
+    } catch (err: unknown) {
+      setError(getErrorMessage(err));
     } finally {
       setLoading(false);
     }
@@ -34,83 +38,105 @@ export default function ExecutionsPage() {
 
   useEffect(() => {
     load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- reload only when the page changes
   }, [page]);
+
+  const toggle = (id: string) => setExpanded(expanded === id ? null : id);
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h1 className="text-3xl font-bold">Executions</h1>
-          <p className="text-surface-200/50 mt-1">Every workflow run, newest first</p>
-        </div>
-        <button onClick={load} disabled={loading}
-                className="flex items-center gap-1.5 px-3 py-2 bg-surface-700/50 hover:bg-surface-700 rounded-lg text-sm transition-colors disabled:opacity-50">
-          <RefreshCw size={14} className={loading ? 'animate-spin' : ''} /> Refresh
-        </button>
-      </div>
+      <PageHeader
+        title="Executions"
+        description="Every workflow run, newest first. Expand a run to see its timeline."
+        actions={
+          <button onClick={load} disabled={loading} className="btn btn-secondary">
+            <RefreshCw size={14} className={loading ? 'animate-spin' : ''} aria-hidden /> Refresh
+          </button>
+        }
+      />
 
-      {error && <p className="text-red-400 mb-4">Could not load executions: {error}</p>}
+      {error && <p role="alert" className="mb-4 text-sm text-red-400">Could not load executions: {error}</p>}
+      {loading && items.length === 0 && !error && <p className="text-sm text-surface-200/50">Loading executions…</p>}
       {!loading && items.length === 0 && !error && (
-        <p className="text-surface-200/50">No executions yet. Run a workflow from its page.</p>
+        <p className="glass rounded-xl p-6 text-sm text-surface-200/50">
+          No executions yet. Open a workflow and choose <span className="text-white">Execute Workflow</span> to run it.
+        </p>
       )}
 
       {items.length > 0 && (
-        <div className={`glass rounded-xl overflow-x-auto ${loading ? 'opacity-60' : ''}`}>
+        <div className={`glass overflow-x-auto rounded-xl transition-opacity ${loading ? 'opacity-60' : ''}`} aria-busy={loading}>
           <table className="w-full text-sm">
-            <thead className="text-surface-200/50 text-xs uppercase tracking-wide border-b border-surface-700/50">
+            <thead className="border-b border-surface-700/50 text-xs uppercase tracking-wide text-surface-200/50">
               <tr>
-                <th className="px-4 py-3 w-8" />
+                <th className="w-8 px-4 py-3"><span className="sr-only">Expand</span></th>
                 <th className="px-4 py-3 text-left">Workflow</th>
-                <th className="px-4 py-3 text-left">Started</th>
+                <th className="px-4 py-3 text-left">Status</th>
+                <th className="whitespace-nowrap px-4 py-3 text-left">Started</th>
                 <th className="px-4 py-3 text-right">Stages</th>
                 <th className="px-4 py-3 text-right">Duration</th>
                 <th className="px-4 py-3 text-right">Cost</th>
               </tr>
             </thead>
             <tbody className="tabular-nums">
-              {items.map((e) => (
-                <Fragment key={e.execution_id}>
-                  <tr className="border-b border-surface-700/30 hover:bg-surface-700/20 cursor-pointer"
-                      onClick={() => setExpanded(expanded === e.execution_id ? null : e.execution_id)}>
-                    <td className="px-4 py-3 text-surface-200/50">
-                      {expanded === e.execution_id ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-                    </td>
-                    <td className="px-4 py-3">
-                      <Link to={`/workflows/${e.workflow_id}`} onClick={(ev) => ev.stopPropagation()}
-                            className="font-medium hover:text-primary-400">
-                        {e.workflow_name}
-                      </Link>
-                      <div className="text-xs text-surface-200/40 font-mono">{e.execution_id.slice(0, 8)}</div>
-                    </td>
-                    <td className="px-4 py-3 text-surface-200/70">{e.started_at ? new Date(e.started_at).toLocaleString() : '—'}</td>
-                    <td className="px-4 py-3 text-right">{e.completed_stages}/{e.total_stages}</td>
-                    <td className="px-4 py-3 text-right">{e.duration_ms != null ? formatDuration(e.duration_ms) : '—'}</td>
-                    <td className="px-4 py-3 text-right">{formatUSD(Number(e.total_cost))}</td>
-                  </tr>
-                  {expanded === e.execution_id && (
-                    <tr className="border-b border-surface-700/30">
-                      <td colSpan={6} className="px-4 py-4">
-                        <ExecutionTimelineView executionId={e.execution_id} dark />
+              {items.map((e) => {
+                const isOpen = expanded === e.execution_id;
+                return (
+                  <Fragment key={e.execution_id}>
+                    <tr className="cursor-pointer border-b border-surface-700/30 hover:bg-surface-700/20" onClick={() => toggle(e.execution_id)}>
+                      <td className="px-4 py-3 text-surface-200/50">
+                        <button
+                          onClick={(ev) => { ev.stopPropagation(); toggle(e.execution_id); }}
+                          aria-expanded={isOpen}
+                          aria-label={`${isOpen ? 'Hide' : 'Show'} timeline for ${e.workflow_name}`}
+                          className="rounded p-0.5 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-400/60"
+                        >
+                          {isOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                        </button>
                       </td>
+                      <td className="px-4 py-3">
+                        <Link
+                          to={`/workflows/${e.workflow_id}`}
+                          onClick={(ev) => ev.stopPropagation()}
+                          className="font-medium hover:text-primary-400"
+                        >
+                          {e.workflow_name}
+                        </Link>
+                        <div className="font-mono text-xs text-surface-200/40">{e.execution_id.slice(0, 8)}</div>
+                      </td>
+                      <td className="px-4 py-3"><StatusBadge status={e.status} /></td>
+                      <td className="whitespace-nowrap px-4 py-3 text-surface-200/70">
+                        {e.started_at ? new Date(e.started_at).toLocaleString() : '—'}
+                      </td>
+                      <td className="px-4 py-3 text-right">{e.completed_stages}/{e.total_stages}</td>
+                      <td className="px-4 py-3 text-right">{e.duration_ms != null ? formatDuration(e.duration_ms) : '—'}</td>
+                      <td className="px-4 py-3 text-right">{formatUSD(Number(e.total_cost))}</td>
                     </tr>
-                  )}
-                </Fragment>
-              ))}
+                    {isOpen && (
+                      <tr className="border-b border-surface-700/30">
+                        <td colSpan={COLUMN_COUNT} className="px-4 py-4">
+                          <ExecutionTimelineView executionId={e.execution_id} dark />
+                        </td>
+                      </tr>
+                    )}
+                  </Fragment>
+                );
+              })}
             </tbody>
           </table>
         </div>
       )}
 
-      <div className="flex justify-end gap-2 mt-4">
-        <button onClick={() => setPage(Math.max(0, page - 1))} disabled={page === 0 || loading}
-                className="px-3 py-1.5 bg-surface-700/50 hover:bg-surface-700 rounded-lg text-sm disabled:opacity-40">
-          Previous
-        </button>
-        <button onClick={() => setPage(page + 1)} disabled={items.length < PAGE_SIZE || loading}
-                className="px-3 py-1.5 bg-surface-700/50 hover:bg-surface-700 rounded-lg text-sm disabled:opacity-40">
-          Next
-        </button>
-      </div>
+      {(page > 0 || items.length === PAGE_SIZE) && (
+        <div className="mt-4 flex items-center justify-end gap-2">
+          <span className="mr-2 text-xs text-surface-200/40">Page {page + 1}</span>
+          <button onClick={() => setPage(Math.max(0, page - 1))} disabled={page === 0 || loading} className="btn btn-secondary py-1.5">
+            Previous
+          </button>
+          <button onClick={() => setPage(page + 1)} disabled={items.length < PAGE_SIZE || loading} className="btn btn-secondary py-1.5">
+            Next
+          </button>
+        </div>
+      )}
     </div>
   );
 }

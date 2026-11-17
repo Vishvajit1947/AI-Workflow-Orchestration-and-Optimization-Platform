@@ -114,7 +114,7 @@ describe('CacheDashboard', () => {
   it('shows an error when the API fails', async () => {
     api.getStats.mockRejectedValue(new Error('Network Error'));
     render(<CacheDashboard />);
-    expect(await screen.findByText('Error: Network Error')).toBeInTheDocument();
+    expect(await screen.findByText('Could not load the cache: Network Error')).toBeInTheDocument();
   });
 
   it('expands a row to show full input and cached output', async () => {

@@ -62,12 +62,6 @@ class ResetPasswordRequest(BaseModel):
     new_password: str = Field(..., min_length=settings.PASSWORD_MIN_LENGTH)
 
 
-class VerifyEmailRequest(BaseModel):
-    """Verify email request."""
-
-    token: str
-
-
 class MessageResponse(BaseModel):
     """Generic message response."""
 

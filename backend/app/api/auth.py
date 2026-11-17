@@ -4,7 +4,7 @@ Authentication API endpoints.
 
 import logging
 
-from fastapi import APIRouter, Depends, HTTPException, Response, Cookie
+from fastapi import APIRouter, Depends, HTTPException, Response, Cookie, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from slowapi import Limiter
 from slowapi.util import get_remote_address
@@ -17,12 +17,11 @@ from backend.app.schemas.auth import (
     UserResponse,
     ForgotPasswordRequest,
     ResetPasswordRequest,
-    VerifyEmailRequest,
     MessageResponse,
     AuthResponse,
 )
 from backend.app.services import auth_service, session_service, email_service
-from backend.app.core.dependencies import get_current_user, get_current_active_user
+from backend.app.core.dependencies import get_current_active_user
 from backend.app.config import settings
 
 logger = logging.getLogger(__name__)
@@ -31,31 +30,44 @@ router = APIRouter(prefix="/auth", tags=["Auth"])
 limiter = Limiter(key_func=get_remote_address)
 
 
+async def _start_session(
+    db: AsyncSession, response: Response, user: User, remember_me: bool
+) -> None:
+    """Create a session for the user and set it as an httponly cookie."""
+    expires_in_days = 30 if remember_me else 7
+    _, plain_token = await session_service.create_session(
+        db, user.id, expires_in_days=expires_in_days
+    )
+    response.set_cookie(
+        key="session_token",
+        value=plain_token,
+        httponly=True,
+        secure=settings.ENVIRONMENT == "production",
+        samesite="lax",
+        max_age=expires_in_days * 86400,
+        path="/",
+    )
+
+
 @router.post("/register", response_model=AuthResponse, status_code=201)
 @limiter.limit("10/minute")
 async def register(
-    request: RegisterRequest,
+    request: Request,
+    body: RegisterRequest,
     response: Response,
     db: AsyncSession = Depends(get_db),
 ):
-    """Register a new user account."""
+    """Register a new user account and sign them in."""
     try:
-        # Create user
         user = await auth_service.register_user(
-            db, request.email, request.password, request.full_name
+            db, body.email, body.password, body.full_name
         )
-
-        # Create verification token and send email (non-blocking)
-        verification_token = await auth_service.create_verification_token(db, user.id)
-        await email_service.send_verification_email(
-            user.email, user.full_name, verification_token
-        )
-
+        await _start_session(db, response, user, remember_me=False)
         await db.commit()
 
         return AuthResponse(
             user=UserResponse.model_validate(user),
-            message="Please check your email to verify your account",
+            message="Account created",
         )
 
     except HTTPException:
@@ -69,35 +81,19 @@ async def register(
 @router.post("/login", response_model=UserResponse)
 @limiter.limit("10/minute")
 async def login(
-    request: LoginRequest,
+    request: Request,
+    body: LoginRequest,
     response: Response,
     db: AsyncSession = Depends(get_db),
 ):
     """Authenticate user and create session."""
-    user = await auth_service.authenticate_user(db, request.email, request.password)
+    user = await auth_service.authenticate_user(db, body.email, body.password)
 
     if not user:
         raise HTTPException(status_code=401, detail="Invalid email or password")
 
-    # Create session
-    expires_in_days = 30 if request.remember_me else 7
-    _, plain_token = await session_service.create_session(
-        db, user.id, expires_in_days=expires_in_days
-    )
-
+    await _start_session(db, response, user, remember_me=body.remember_me)
     await db.commit()
-
-    # Set httponly cookie
-    secure = settings.ENVIRONMENT == "production"
-    response.set_cookie(
-        key="session_token",
-        value=plain_token,
-        httponly=True,
-        secure=secure,
-        samesite="lax",
-        max_age=expires_in_days * 86400,
-        path="/",
-    )
 
     return UserResponse.model_validate(user)
 
@@ -132,18 +128,19 @@ async def get_current_user_info(
 @router.post("/forgot-password", response_model=MessageResponse)
 @limiter.limit("10/minute")
 async def forgot_password(
-    request: ForgotPasswordRequest,
+    request: Request,
+    body: ForgotPasswordRequest,
     db: AsyncSession = Depends(get_db),
 ):
     """Request a password reset email (non-enumeration response)."""
     # Create reset token if user exists
-    token = await auth_service.create_password_reset_token(db, request.email)
+    token = await auth_service.create_password_reset_token(db, body.email)
 
     if token:
         # Send reset email
         from sqlalchemy import select
 
-        stmt = select(User).where(User.email_normalized == request.email.lower().strip())
+        stmt = select(User).where(User.email_normalized == body.email.lower().strip())
         result = await db.execute(stmt)
         user = result.scalar_one_or_none()
 
@@ -178,42 +175,3 @@ async def reset_password(
 
     return MessageResponse(message="Password reset successfully")
 
-
-@router.post("/verify-email", response_model=MessageResponse)
-async def verify_email(
-    request: VerifyEmailRequest,
-    db: AsyncSession = Depends(get_db),
-):
-    """Verify user email using verification token."""
-    success = await auth_service.verify_email(db, request.token)
-
-    if not success:
-        raise HTTPException(
-            status_code=400,
-            detail="Invalid or expired verification token",
-        )
-
-    await db.commit()
-
-    return MessageResponse(message="Email verified successfully")
-
-
-@router.post("/resend-verification", response_model=MessageResponse)
-@limiter.limit("10/minute")
-async def resend_verification(
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-):
-    """Resend email verification link."""
-    if current_user.is_email_verified:
-        raise HTTPException(status_code=400, detail="Email already verified")
-
-    # Create new verification token
-    token = await auth_service.create_verification_token(db, current_user.id)
-    await email_service.send_verification_email(
-        current_user.email, current_user.full_name, token
-    )
-
-    await db.commit()
-
-    return MessageResponse(message="Verification email sent")

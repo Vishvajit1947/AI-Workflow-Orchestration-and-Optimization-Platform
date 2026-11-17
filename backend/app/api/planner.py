@@ -11,6 +11,8 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.app.database import get_db
+from backend.app.core.dependencies import get_current_active_user
+from backend.app.models.user import User
 from backend.app.schemas.planner import (
     ObjectiveAnalysisRequest,
     ObjectiveAnalysisResponse,
@@ -73,6 +75,7 @@ async def analyze_objective(
 async def generate_workflow_from_plan(
     request: WorkflowGenerationRequest,
     db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
 ):
     """
     Generate a complete workflow from an approved plan.
@@ -86,8 +89,8 @@ async def generate_workflow_from_plan(
     
     The workflow can then be executed via POST /api/workflows/{id}/execute
     """
-    workflow_mgr = WorkflowManager(db)
-    stage_mgr = StageManager(db)
+    workflow_mgr = WorkflowManager(db, current_user.id)
+    stage_mgr = StageManager(db, current_user.id)
     plan = request.plan
     
     # Re-validate plan (user may have edited it)

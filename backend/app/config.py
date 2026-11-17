@@ -68,10 +68,8 @@ class Settings(BaseSettings):
     # ---------- Authentication ----------
     SESSION_SECRET_KEY: str = "change-me-in-production"
     SESSION_EXPIRE_DAYS: int = 7
-    REQUIRE_EMAIL_VERIFICATION: bool = True
     PASSWORD_MIN_LENGTH: int = 12
     PASSWORD_RESET_EXPIRE_MINUTES: int = 60
-    EMAIL_VERIFICATION_EXPIRE_HOURS: int = 24
 
     # ---------- SMTP (Email) ----------
     SMTP_HOST: str = "localhost"
@@ -83,6 +81,13 @@ class Settings(BaseSettings):
 
     # ---------- Frontend URL ----------
     FRONTEND_URL: str = "http://localhost:5173"
+
+    # ---------- Workspace & Project Builder ----------
+    WORKSPACE_ROOT: str = "/var/projects"
+    MAX_FILE_SIZE_MB: int = 10
+    MAX_WORKSPACE_SIZE_MB: int = 500
+    MAX_FILES_PER_WORKSPACE: int = 1000
+    ALLOWED_FILE_EXTENSIONS: str = ".py,.js,.ts,.tsx,.jsx,.json,.yaml,.yml,.md,.txt,.html,.css,.sh,.toml,.ini,.xml,.go,.rs,.rb,.csv,.sql"
 
 
 # Singleton instance — import this everywhere

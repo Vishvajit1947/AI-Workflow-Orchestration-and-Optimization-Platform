@@ -322,7 +322,7 @@ async def test_store_with_dependencies_uses_configured_ttl(db_session: AsyncSess
 # ---------------------------------------------------------------------------
 
 @pytest.mark.asyncio
-async def test_lookup_with_validation_hits_then_misses_on_upstream_change(db_session: AsyncSession):
+async def test_lookup_with_validation_hits_then_misses_on_upstream_change(db_session: AsyncSession, test_user):
     """Hit while upstream output is unchanged; miss once upstream output changes."""
     workflow, (stage1, stage2) = await _create_workflow(db_session, 2)
     ctx_mgr = ContextManager(db_session)
@@ -362,7 +362,7 @@ async def test_lookup_with_validation_hits_then_misses_on_upstream_change(db_ses
 
 
 @pytest.mark.asyncio
-async def test_lookup_with_validation_disabled(db_session: AsyncSession, monkeypatch):
+async def test_lookup_with_validation_disabled(db_session: AsyncSession, monkeypatch, test_user):
     """With workflow validation off, dependency hash is ignored."""
     monkeypatch.setattr(settings, "CACHE_ENABLE_WORKFLOW_VALIDATION", False)
     workflow, (stage1, stage2) = await _create_workflow(db_session, 2)

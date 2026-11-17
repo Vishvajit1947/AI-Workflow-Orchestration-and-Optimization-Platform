@@ -8,7 +8,6 @@ import {
   LoginData,
   ForgotPasswordData,
   ResetPasswordData,
-  VerifyEmailData,
   User,
   AuthResponse,
 } from '../types/auth';
@@ -48,23 +47,6 @@ export const resetPassword = async (
   const response = await api.post<{ message: string }>(
     '/auth/reset-password',
     data
-  );
-  return response.data;
-};
-
-export const verifyEmail = async (
-  data: VerifyEmailData
-): Promise<{ message: string }> => {
-  const response = await api.post<{ message: string }>(
-    '/auth/verify-email',
-    data
-  );
-  return response.data;
-};
-
-export const resendVerification = async (): Promise<{ message: string }> => {
-  const response = await api.post<{ message: string }>(
-    '/auth/resend-verification'
   );
   return response.data;
 };

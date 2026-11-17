@@ -11,6 +11,25 @@
   }
 }
 
+/* Shared controls: one definition per variant instead of repeated utility strings */
+@layer components {
+  .btn {
+    @apply inline-flex items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium
+           transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-400/60
+           disabled:cursor-not-allowed disabled:opacity-50;
+  }
+  .btn-primary { @apply bg-primary-600 text-white hover:bg-primary-500; }
+  .btn-secondary { @apply bg-surface-700/50 text-white hover:bg-surface-700; }
+  .btn-danger { @apply bg-red-500/10 text-red-400 hover:bg-red-500/20; }
+  .btn-ghost { @apply text-surface-200/60 hover:bg-surface-700/50 hover:text-white; }
+
+  .input {
+    @apply w-full rounded-lg border border-surface-700/50 bg-surface-800/50 px-3 py-2 text-sm text-white
+           transition-colors placeholder:text-surface-200/30 focus:border-primary-500/50 focus:outline-none
+           disabled:opacity-50;
+  }
+}
+
 /* Scrollbar styling */
 ::-webkit-scrollbar {
   width: 6px;

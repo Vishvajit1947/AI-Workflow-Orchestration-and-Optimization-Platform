@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { workflowApi } from '../lib/workflows';
+import { getErrorMessage } from '../lib/errors';
 import type { WorkflowListItem, Workflow, PaginatedResponse } from '../types';
 
 export function useWorkflowList() {
@@ -13,8 +14,8 @@ export function useWorkflowList() {
     try {
       const result = await workflowApi.list(skip, limit, status);
       setData(result);
-    } catch (e: any) {
-      setError(e.response?.data?.detail || e.message);
+    } catch (e: unknown) {
+      setError(getErrorMessage(e));
     } finally {
       setLoading(false);
     }
@@ -37,8 +38,8 @@ export function useWorkflow(id: string | undefined) {
     try {
       const result = await workflowApi.get(id);
       setWorkflow(result);
-    } catch (e: any) {
-      setError(e.response?.data?.detail || e.message);
+    } catch (e: unknown) {
+      setError(getErrorMessage(e));
     } finally {
       setLoading(false);
     }

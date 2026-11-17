@@ -1,118 +1,115 @@
-import { useState } from 'react';
+import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Plus, Search, GitBranch, Clock, Trash2 } from 'lucide-react';
+import { Plus, Search, GitBranch, Layers, Trash2 } from 'lucide-react';
 import { useWorkflowList } from '../hooks/useWorkflows';
 import { workflowApi } from '../lib/workflows';
-
-const statusColors: Record<string, string> = {
-  draft: 'bg-surface-700/50 text-surface-200/80',
-  running: 'bg-blue-500/15 text-blue-300',
-  completed: 'bg-primary-500/15 text-primary-400',
-  failed: 'bg-red-500/15 text-red-300',
-  paused: 'bg-amber-500/15 text-amber-300',
-};
+import { getErrorMessage } from '../lib/errors';
+import { PageHeader } from '../components/ui/PageHeader';
+import { StatusBadge } from '../components/ui/StatusBadge';
 
 export default function WorkflowList() {
   const { data, loading, error, refetch } = useWorkflowList();
   const [search, setSearch] = useState('');
 
-  const filtered = data?.items.filter(w =>
-    w.name.toLowerCase().includes(search.toLowerCase())
-  ) || [];
+  const query = search.trim().toLowerCase();
+  const workflows = data?.items ?? [];
+  const filtered = workflows.filter((w) => w.name.toLowerCase().includes(query));
 
-  const handleDelete = async (id: string, e: React.MouseEvent) => {
+  const handleDelete = async (id: string, name: string, e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    if (!confirm('Delete this workflow?')) return;
-    await workflowApi.delete(id);
-    refetch();
+    if (!confirm(`Delete the workflow "${name}"?`)) return;
+    try {
+      await workflowApi.delete(id);
+      refetch();
+    } catch (err: unknown) {
+      alert(`Could not delete the workflow: ${getErrorMessage(err)}`);
+    }
   };
 
   return (
     <div>
-      {/* Header */}
-      <div className="flex items-center justify-between mb-8">
-        <div>
-          <h1 className="text-3xl font-bold">Workflows</h1>
-          <p className="text-surface-200/50 mt-1">Manage your AI workflow pipelines</p>
-        </div>
-        <Link
-          to="/workflows/new"
-          className="flex items-center gap-2 px-4 py-2.5 bg-primary-600 hover:bg-primary-500 rounded-lg text-sm font-medium transition-all duration-200 shadow-lg shadow-primary-600/25"
-        >
-          <Plus size={18} />
-          New Workflow
-        </Link>
-      </div>
+      <PageHeader
+        title="Workflows"
+        description="Your saved workflows and their latest status"
+        actions={
+          <Link to="/" className="btn btn-primary">
+            <Plus size={16} aria-hidden />
+            New Workflow
+          </Link>
+        }
+      />
 
-      {/* Search */}
       <div className="relative mb-6">
-        <Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-surface-200/40" />
+        <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-surface-200/40" aria-hidden />
         <input
-          type="text"
-          placeholder="Search workflows..."
+          type="search"
+          aria-label="Search workflows"
+          placeholder="Search workflows…"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          className="w-full pl-10 pr-4 py-2.5 bg-surface-800/50 border border-surface-700/50 rounded-lg text-sm text-white placeholder:text-surface-200/30 focus:outline-none focus:border-primary-500/50 transition-colors"
+          className="input py-2.5 pl-9"
         />
       </div>
 
-      {/* Loading */}
-      {loading && <p className="text-surface-200/50">Loading workflows...</p>}
-      {error && <p className="text-red-400">Error: {error}</p>}
+      {loading && <p className="text-sm text-surface-200/50">Loading workflows…</p>}
+      {error && <p role="alert" className="text-sm text-red-400">Could not load workflows: {error}</p>}
 
-      {/* Grid */}
-      {!loading && (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {filtered.map(w => (
-            <Link
-              key={w.id}
-              to={`/workflows/${w.id}`}
-              className="glass rounded-xl p-5 card-hover group"
-            >
-              <div className="flex items-start justify-between mb-3">
-                <div className="flex items-center gap-2">
-                  <GitBranch size={18} className="text-primary-400" />
-                  <h3 className="font-semibold text-white group-hover:text-primary-300 transition-colors">
+      {!loading && !error && (
+        <>
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+            {filtered.map((w) => (
+              <Link
+                key={w.id}
+                to={`/workflows/${w.id}`}
+                className="glass card-hover group flex flex-col rounded-xl p-5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-400/60"
+              >
+                <div className="mb-2 flex items-start justify-between gap-2">
+                  <h3 className="min-w-0 break-words font-semibold text-white transition-colors group-hover:text-primary-300">
                     {w.name}
                   </h3>
+                  <button
+                    onClick={(e) => handleDelete(w.id, w.name, e)}
+                    aria-label={`Delete ${w.name}`}
+                    className="shrink-0 rounded p-1 text-surface-200/40 transition-colors hover:text-red-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400/60"
+                  >
+                    <Trash2 size={14} />
+                  </button>
                 </div>
-                <button
-                  onClick={(e) => handleDelete(w.id, e)}
-                  className="opacity-0 group-hover:opacity-100 p-1 hover:text-red-400 transition-all"
-                >
-                  <Trash2 size={14} />
-                </button>
-              </div>
-              {w.description && (
-                <p className="text-sm text-surface-200/50 mb-3 line-clamp-2">{w.description}</p>
-              )}
-              <div className="flex items-center justify-between text-xs">
-                <span className={`px-2 py-0.5 rounded-full ${statusColors[w.status] || statusColors.draft}`}>
-                  {w.status}
-                </span>
-                <span className="text-surface-200/40 flex items-center gap-1">
-                  <Clock size={12} />
-                  {w.stage_count} stages
-                </span>
-              </div>
-            </Link>
-          ))}
+                {w.description && <p className="mb-3 line-clamp-2 text-sm text-surface-200/50">{w.description}</p>}
+                <div className="mt-auto flex items-center justify-between pt-2 text-xs">
+                  <StatusBadge status={w.status} />
+                  <span className="flex items-center gap-1 text-surface-200/40">
+                    <Layers size={12} aria-hidden />
+                    {w.stage_count} {w.stage_count === 1 ? 'stage' : 'stages'}
+                  </span>
+                </div>
+              </Link>
+            ))}
+          </div>
 
-          {filtered.length === 0 && !loading && (
-            <div className="col-span-full text-center py-12 text-surface-200/40">
-              <GitBranch size={48} className="mx-auto mb-4 opacity-30" />
-              <p>No workflows found. Create your first one!</p>
+          {filtered.length === 0 && (
+            <div className="py-16 text-center text-surface-200/50">
+              <GitBranch size={40} className="mx-auto mb-4 opacity-30" aria-hidden />
+              {workflows.length === 0 ? (
+                <>
+                  <p className="mb-4">No workflows yet.</p>
+                  <Link to="/" className="btn btn-primary">
+                    <Plus size={16} aria-hidden /> Plan your first workflow
+                  </Link>
+                </>
+              ) : (
+                <p>No workflows match “{search.trim()}”.</p>
+              )}
             </div>
           )}
-        </div>
-      )}
 
-      {/* Pagination info */}
-      {data && (
-        <div className="mt-6 text-sm text-surface-200/40">
-          Showing {filtered.length} of {data.total} workflows
-        </div>
+          {data && data.total > 0 && (
+            <p className="mt-6 text-sm text-surface-200/40">
+              Showing {filtered.length} of {data.total} workflows
+            </p>
+          )}
+        </>
       )}
     </div>
   );

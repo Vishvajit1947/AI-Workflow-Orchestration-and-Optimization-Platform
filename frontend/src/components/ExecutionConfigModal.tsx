@@ -84,6 +84,14 @@ export const ExecutionConfigModal: React.FC<ExecutionConfigModalProps> = ({
     }
   }, [isOpen, workflowId, stages.length]);
 
+  // Escape closes the dialog
+  useEffect(() => {
+    if (!isOpen) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [isOpen, onClose]);
+
   if (!isOpen) return null;
 
   // Until the registry answers (or if it fails) offer every provider the backend supports
@@ -116,11 +124,16 @@ export const ExecutionConfigModal: React.FC<ExecutionConfigModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-surface-800 text-white border border-surface-700 rounded-lg shadow-xl p-6 w-full max-w-lg max-h-[90vh] overflow-y-auto">
-        <h2 className="text-2xl font-bold mb-4">Execute Workflow</h2>
-        <p className="text-surface-200/60 mb-6">
-          Configure execution parameters for <strong>{workflowName}</strong>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="execute-dialog-title"
+        className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-xl border border-surface-700 bg-surface-800 p-6 text-white shadow-xl"
+      >
+        <h2 id="execute-dialog-title" className="mb-1 text-xl font-semibold">Execute Workflow</h2>
+        <p className="mb-6 text-sm text-surface-200/60">
+          Run settings for <strong className="text-white">{workflowName}</strong>
         </p>
 
         {/* Routing toggle */}
@@ -268,17 +281,11 @@ export const ExecutionConfigModal: React.FC<ExecutionConfigModalProps> = ({
         </div>
 
         {/* Actions */}
-        <div className="flex gap-3 justify-end">
-          <button
-            onClick={onClose}
-            className="px-4 py-2 text-surface-200 bg-surface-700/50 rounded-md hover:bg-surface-700"
-          >
+        <div className="flex justify-end gap-3 border-t border-surface-700 pt-5">
+          <button onClick={onClose} className="btn btn-secondary px-4">
             Cancel
           </button>
-          <button
-            onClick={handleExecute}
-            className="px-4 py-2 bg-primary-600 text-white rounded-md hover:bg-primary-500"
-          >
+          <button onClick={handleExecute} className="btn btn-primary px-4" autoFocus>
             Execute
           </button>
         </div>

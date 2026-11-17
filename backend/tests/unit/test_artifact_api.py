@@ -16,6 +16,7 @@ from httpx import ASGITransport, AsyncClient
 
 from backend.app.api import artifacts as artifacts_api
 from backend.app.artifacts.document import ExportError
+from backend.app.core.dependencies import get_current_active_user
 from backend.app.database import get_db
 from backend.app.main import app
 
@@ -75,8 +76,13 @@ def use_records():
 
 @pytest.fixture
 async def client():
+    # These tests cover artifact formatting against a fake session that ignores SQL
+    # filters, so authentication is stubbed here. Authentication and ownership of these
+    # endpoints are tested against the real database in tests/integration/test_authorization.py.
+    app.dependency_overrides[get_current_active_user] = lambda: SimpleNamespace(id=uuid.uuid4(), is_active=True)
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
         yield c
+    app.dependency_overrides.pop(get_current_active_user, None)
 
 
 EXPLANATION = "# Binary Trees\n\nA **tree** with `nodes`.\n\n| a | b |\n|---|---|\n| 1 | 2 |"

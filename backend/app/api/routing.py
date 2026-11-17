@@ -10,7 +10,11 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from backend.app.core.dependencies import get_current_active_user
+from backend.app.core.ownership import get_owned_workflow, owned_workflow_ids
 from backend.app.database import get_db
+from backend.app.models.stage import Stage
+from backend.app.models.user import User
 from backend.app.models.model_profile import ModelProfile
 from backend.app.models.routing_rule import RoutingDecision
 from backend.app.models.workflow import Workflow
@@ -81,9 +85,16 @@ async def list_decisions(
     stage_type: Optional[str] = Query(None),
     limit: int = Query(50, ge=1, le=500),
     db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
 ):
-    """Routing decision log, newest first."""
-    query = select(RoutingDecision).order_by(RoutingDecision.created_at.desc()).limit(limit)
+    """The caller's routing decision log, newest first."""
+    query = (
+        select(RoutingDecision)
+        .join(Stage, Stage.id == RoutingDecision.stage_id)
+        .where(Stage.workflow_id.in_(owned_workflow_ids(current_user.id)))
+        .order_by(RoutingDecision.created_at.desc())
+        .limit(limit)
+    )
     if execution_id:
         query = query.where(RoutingDecision.execution_id == execution_id)
     if stage_type:
@@ -93,14 +104,13 @@ async def list_decisions(
 
 
 @router.get("/preview/{workflow_id}", response_model=List[RoutingPreviewItem])
-async def preview_routing(workflow_id: uuid.UUID, db: AsyncSession = Depends(get_db)):
+async def preview_routing(
+    workflow_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+):
     """Which model each stage would be routed to right now. Nothing is logged."""
-    result = await db.execute(
-        select(Workflow).options(selectinload(Workflow.stages)).where(Workflow.id == workflow_id)
-    )
-    workflow = result.scalar_one_or_none()
-    if not workflow:
-        raise HTTPException(status_code=404, detail=f"Workflow {workflow_id} not found")
+    workflow = await get_owned_workflow(db, workflow_id, current_user.id, selectinload(Workflow.stages))
 
     engine = RoutingEngine(db, available_providers=provider_registry.list_providers())
     preview = []
