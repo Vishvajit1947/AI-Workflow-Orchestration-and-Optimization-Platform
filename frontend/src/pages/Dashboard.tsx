@@ -1,23 +1,21 @@
 /**
  * Analytics dashboard: one filter row (date range + workflow) scoping the analytics below it,
- * headline stat tiles, trend charts, recent activity, model/latency/cache breakdowns,
+ * headline stat tiles, trend charts, model/latency/cache breakdowns,
  * per-stage-type table and routing effectiveness.
  */
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
-  Activity, ArrowRight, BarChart3, CheckCircle2, Coins, Database, Gauge, GitBranch, Hash, RefreshCw, Zap,
+  Activity, BarChart3, CheckCircle2, Coins, Database, Gauge, Hash, RefreshCw,
 } from 'lucide-react';
 import { analyticsApi } from '../api/analyticsApi';
-import { executionApi } from '../api/executionApi';
 import { workflowApi } from '../lib/workflows';
 import type {
   AnalyticsFilters, CacheMetrics, CostTrendPoint, LatencyMetrics, ModelUtilization,
   RoutingEffectiveness, StageTypeMetrics, TokenTrendPoint, WorkflowMetrics,
 } from '../types/analytics';
 import type { WorkflowListItem } from '../types';
-import type { ExecutionListItem } from '../types/execution';
-import { formatCompact, formatDuration, formatPercent, formatUSD, relativeTime } from '../lib/format';
+import { formatCompact, formatDuration, formatPercent, formatUSD } from '../lib/format';
 import { MetricCard, MetricGrid } from '../components/metrics/MetricCard';
 import { CostChart } from '../components/charts/CostChart';
 import { TokenChart } from '../components/charts/TokenChart';
@@ -28,9 +26,7 @@ import { CHART, ChartCard, DataTable } from '../components/charts/chartKit';
 import { ExportButton } from '../components/analytics/ExportButton';
 import { PageHeader } from '../components/ui/PageHeader';
 import { SegmentedControl } from '../components/ui/Tabs';
-import { StatusBadge } from '../components/ui/StatusBadge';
 import { EmptyState, ErrorState, Skeleton } from '../components/ui/States';
-import { Reveal } from '../components/motion/Motion';
 import { getErrorMessage } from '../lib/errors';
 
 const RANGES = [
@@ -38,8 +34,6 @@ const RANGES = [
   { value: 30, label: 'Last 30 days' },
   { value: 90, label: 'Last 90 days' },
 ];
-
-const RECENT_COUNT = 6;
 
 interface DashboardData {
   overview: WorkflowMetrics;
@@ -67,7 +61,6 @@ export default function Dashboard() {
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [recent, setRecent] = useState<ExecutionListItem[] | null>(null);
 
   const filters = useMemo(() => rangeFilters(days, workflowId), [days, workflowId]);
 
@@ -101,21 +94,7 @@ export default function Dashboard() {
     workflowApi.list(0, 100)
       .then((page) => setWorkflows(page.items))
       .catch(() => { /* filter just lists fewer options */ });
-    (async () => {
-      try {
-        setRecent((await executionApi.listExecutions(undefined, RECENT_COUNT, 0)) ?? []);
-      } catch {
-        setRecent([]); // the activity card shows its empty state
-      }
-    })();
   }, []);
-
-  const recentWorkflows = useMemo(
-    () => [...workflows]
-      .sort((a, b) => (Date.parse(b.updated_at) || 0) - (Date.parse(a.updated_at) || 0))
-      .slice(0, RECENT_COUNT),
-    [workflows],
-  );
 
   const exportFilters: AnalyticsFilters = { start_date: filters.start_date, workflow_id: filters.workflow_id };
   const o = data?.overview;
@@ -199,11 +178,6 @@ export default function Dashboard() {
             <TokenChart data={data.tokens} />
           </div>
 
-          <Reveal className="grid gap-6 lg:grid-cols-2">
-            <RecentExecutions items={recent} />
-            <RecentWorkflows items={recentWorkflows} />
-          </Reveal>
-
           <div className="grid gap-6 lg:grid-cols-2">
             <ChartCard
               title="Model usage"
@@ -248,91 +222,6 @@ export default function Dashboard() {
         </div>
       )}
     </div>
-  );
-}
-
-function ActivityHeader({ title, subtitle, to }: { title: string; subtitle: string; to: string }) {
-  return (
-    <div className="mb-3 flex items-start justify-between gap-3">
-      <div>
-        <h3 className="text-[15px] font-medium text-ink">{title}</h3>
-        <p className="mt-1 text-xs text-ink-muted">{subtitle}</p>
-      </div>
-      <Link to={to} className="btn btn-ghost btn-sm -mr-2 -mt-1">
-        View all <ArrowRight size={13} aria-hidden />
-      </Link>
-    </div>
-  );
-}
-
-const ROW_LINK = 'flex items-center gap-3 rounded-[10px] px-2 py-2.5 transition-colors hover:bg-lavender-soft focus-visible:ring-2 focus-visible:ring-primary/40';
-
-/** Latest runs across all workflows (not scoped by the filters above). */
-function RecentExecutions({ items }: { items: ExecutionListItem[] | null }) {
-  return (
-    <section className="card min-w-0 p-5 sm:p-6" aria-label="Recent executions">
-      <ActivityHeader title="Recent executions" subtitle="Latest runs across all workflows" to="/executions" />
-      {items === null ? (
-        <div className="space-y-2">{Array.from({ length: 4 }, (_, i) => <Skeleton key={i} className="h-11" />)}</div>
-      ) : items.length === 0 ? (
-        <EmptyState compact icon={Zap} title="No executions yet" description="Run a workflow to see it here." />
-      ) : (
-        <ul className="-mx-2">
-          {items.map((e) => (
-            <li key={e.execution_id}>
-              <Link to={`/executions?expand=${e.execution_id}`} className={ROW_LINK}>
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-book text-ink">{e.workflow_name}</p>
-                  <p className="mt-0.5 truncate text-xs text-ink-muted tabular">
-                    {relativeTime(e.started_at)} · {e.completed_stages}/{e.total_stages} stages
-                    {e.duration_ms != null && ` · ${formatDuration(e.duration_ms)}`}
-                  </p>
-                </div>
-                <span className="hidden text-xs text-ink-muted tabular sm:inline">{formatUSD(Number(e.total_cost))}</span>
-                <StatusBadge status={e.status} />
-              </Link>
-            </li>
-          ))}
-        </ul>
-      )}
-    </section>
-  );
-}
-
-function RecentWorkflows({ items }: { items: WorkflowListItem[] }) {
-  return (
-    <section className="card min-w-0 p-5 sm:p-6" aria-label="Recent workflows">
-      <ActivityHeader title="Recent workflows" subtitle="Most recently updated" to="/workflows" />
-      {items.length === 0 ? (
-        <EmptyState
-          compact
-          icon={GitBranch}
-          title="No workflows yet"
-          description="Plan one from an objective."
-          action={<Link to="/" className="btn btn-secondary btn-sm">New workflow</Link>}
-        />
-      ) : (
-        <ul className="-mx-2">
-          {items.map((w) => (
-            <li key={w.id}>
-              <Link to={`/workflows/${w.id}`} className={ROW_LINK}>
-                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[10px] bg-lavender text-primary" aria-hidden>
-                  <GitBranch size={15} strokeWidth={1.75} />
-                </span>
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-book text-ink">{w.name}</p>
-                  <p className="mt-0.5 truncate text-xs text-ink-muted tabular">
-                    {w.stage_count ?? 0} {w.stage_count === 1 ? 'stage' : 'stages'}
-                    {w.updated_at && ` · updated ${relativeTime(w.updated_at)}`}
-                  </p>
-                </div>
-                {w.status && <StatusBadge status={w.status} />}
-              </Link>
-            </li>
-          ))}
-        </ul>
-      )}
-    </section>
   );
 }
 

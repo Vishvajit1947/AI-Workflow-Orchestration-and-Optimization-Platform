@@ -1,17 +1,27 @@
 /**
- * Application shell. Mercury frames the light canvas with its night colour: a night sidebar
- * (full on desktop, an icon rail on tablets, a drawer on phones) and a light top bar with
- * breadcrumbs above the page.
+ * Application shell. Mercury frames the light canvas with its night colour: a night sidebar and
+ * a light top bar with breadcrumbs above the page.
+ *
+ * The sidebar has three states on md and up (see useShellLayout): expanded, collapsed to an
+ * icon rail, and hidden in focus mode. All three are one element whose width eases between
+ * 256px, 72px and 0; everything inside is laid out against the left edge so icons stay put
+ * while labels fade. Phones use a drawer instead.
+ *
+ * The page <Outlet> keeps the same position in the tree in every state, so toggling never
+ * remounts the page: form input, workflow state, live execution sockets and scroll survive.
  */
 import { useEffect, useId, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import { Outlet, NavLink, Link, useLocation, matchPath } from 'react-router-dom';
 import {
   Sparkles, LayoutDashboard, GitBranch, Database, Zap, Cpu, LogOut, Menu, X, Network, Boxes, ChevronRight, Plus,
+  PanelLeftClose, PanelLeftOpen, Maximize2, Minimize2,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
+import { MOD_KEY, useShellLayout } from '../hooks/useShellLayout';
 import { PageTransition } from './motion/Motion';
+import { Tooltip } from './ui/Tooltip';
 import { EASE, transition } from '../lib/motion';
 
 interface NavItem {
@@ -68,79 +78,100 @@ const BrandMark = () => (
   </span>
 );
 
-const Brand = ({ onDark = true }: { onDark?: boolean }) => (
-  <Link to="/" className="flex items-center gap-2.5 rounded-lg focus-visible:ring-2 focus-visible:ring-primary/50">
-    <BrandMark />
-    <span className={`text-[15px] font-medium tracking-[0.01em] ${onDark ? 'text-on-dark' : 'text-ink'}`}>AI Orchestrator</span>
-  </Link>
-);
+/** Fades labels out when the rail collapses (they stay in place, clipped by the sidebar) */
+const fadeLabel = (hidden: boolean) =>
+  `whitespace-nowrap transition-opacity duration-200 ease-soft ${hidden ? 'pointer-events-none opacity-0' : 'opacity-100 delay-100'}`;
 
 const navLinkClass = (compact: boolean) => ({ isActive }: { isActive: boolean }) =>
-  `group relative flex items-center rounded-[10px] text-sm font-book transition-colors duration-200 ease-soft focus-visible:ring-2 focus-visible:ring-primary/60 ${
-    compact ? 'h-10 w-10 justify-center' : 'gap-3 px-3 py-2'
+  // Fixed left padding in both states so the icon sits on the rail's centre line (36px)
+  `group relative flex items-center gap-3 rounded-[10px] px-[15px] py-2 text-sm font-book
+   transition-[width,background-color,color] duration-300 ease-mercury focus-visible:ring-2 focus-visible:ring-primary/60 ${
+    compact ? 'w-12' : 'w-full'
   } ${
     isActive
       ? 'text-on-dark'
       : 'text-fog hover:bg-[rgba(175,178,206,0.08)] hover:text-on-dark'
   }`;
 
+const Avatar = ({ name }: { name: string }) => (
+  <span
+    className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[rgba(156,180,232,0.2)] text-sm font-medium text-on-dark"
+    aria-hidden
+  >
+    {name.charAt(0).toUpperCase()}
+  </span>
+);
+
 function Sidebar({ compact = false, onClose }: { compact?: boolean; onClose?: () => void }) {
   const { user, logout } = useAuth();
-  // Each sidebar instance (desktop, rail, drawer) slides its own active indicator
+  const { pathname } = useLocation();
+  // Each sidebar instance (desktop, drawer) slides its own active indicator
   const indicatorId = useId();
   return (
     <div className="flex h-full flex-col bg-night">
-      <div className={`flex h-16 shrink-0 items-center ${compact ? 'justify-center' : 'justify-between px-5'}`}>
-        {compact ? <Link to="/" aria-label="AI Orchestrator home"><BrandMark /></Link> : <Brand />}
+      <div className="flex h-16 shrink-0 items-center px-5">
+        <Link
+          to="/"
+          aria-label="AI Orchestrator home"
+          className="flex min-w-0 items-center gap-2.5 rounded-lg focus-visible:ring-2 focus-visible:ring-primary/50"
+        >
+          <BrandMark />
+          <span className={`text-[15px] font-medium tracking-[0.01em] text-on-dark ${fadeLabel(compact)}`}>AI Orchestrator</span>
+        </Link>
         {onClose && (
-          <button onClick={onClose} className="btn btn-glass btn-icon btn-sm" aria-label="Close navigation">
+          <button onClick={onClose} className="btn btn-glass btn-icon btn-sm ml-auto" aria-label="Close navigation">
             <X size={16} />
           </button>
         )}
       </div>
 
-      <nav className={`flex-1 space-y-7 overflow-y-auto pb-4 pt-3 ${compact ? 'px-3' : 'px-3'}`} aria-label="Main">
+      <nav className="flex-1 space-y-7 overflow-y-auto overflow-x-hidden px-3 pb-4 pt-3" aria-label="Main">
         {NAV_SECTIONS.map((section) => (
           <div key={section.title}>
-            {compact ? (
-              <div className="mx-auto mb-2 h-px w-6 bg-night-line" aria-hidden />
-            ) : (
-              <p className="mb-2 px-3 text-eyebrow font-semibold uppercase text-slate">{section.title}</p>
-            )}
-            <div className={`space-y-0.5 ${compact ? 'flex flex-col items-center' : ''}`}>
+            <div className="relative mb-2 h-3">
+              <p className={`px-3 text-eyebrow font-semibold uppercase text-slate ${fadeLabel(compact)}`}>{section.title}</p>
+              <span
+                aria-hidden
+                className={`absolute left-3 top-1/2 h-px w-6 bg-night-line transition-opacity duration-200 ease-soft ${compact ? 'opacity-100' : 'opacity-0'}`}
+              />
+            </div>
+            <div className="space-y-0.5">
               {section.items.map(({ to, icon: Icon, label, end }) => (
-                <NavLink
-                  key={to}
-                  to={to}
-                  end={end}
-                  className={navLinkClass(compact)}
-                  title={compact ? label : undefined}
-                  aria-label={compact ? label : undefined}
-                >
-                  {({ isActive }) => (
-                    <>
-                      {isActive && (
-                        <>
-                          <motion.span
-                            layoutId={`${indicatorId}-bg`}
-                            transition={transition.indicator}
-                            aria-hidden
-                            className="absolute inset-0 rounded-[10px] bg-[rgba(175,178,206,0.14)]"
-                          />
-                          <motion.span
-                            layoutId={`${indicatorId}-bar`}
-                            transition={transition.indicator}
-                            aria-hidden
-                            className="absolute -left-3 h-5 w-[3px] rounded-full bg-primary"
-                          />
-                        </>
-                      )}
-                      <Icon size={17} strokeWidth={1.75} aria-hidden
-                        className={`relative transition-colors duration-200 ease-soft ${isActive ? 'text-periwinkle' : ''}`} />
-                      {!compact && <span className="relative">{label}</span>}
-                    </>
-                  )}
-                </NavLink>
+                <Tooltip key={to} label={label} enabled={compact}>
+                  <NavLink to={to} end={end} className={navLinkClass(compact)} aria-label={compact ? label : undefined}>
+                    {({ isActive }) => (
+                      <>
+                        {isActive && (
+                          <>
+                            <motion.span
+                              layoutId={`${indicatorId}-bg`}
+                              layoutDependency={pathname}
+                              transition={transition.indicator}
+                              aria-hidden
+                              className="absolute inset-0 rounded-[10px] bg-[rgba(175,178,206,0.14)]"
+                            />
+                            <motion.span
+                              layoutId={`${indicatorId}-bar`}
+                              layoutDependency={pathname}
+                              transition={transition.indicator}
+                              aria-hidden
+                              className="absolute -left-3 h-5 w-[3px] rounded-full bg-primary"
+                            />
+                          </>
+                        )}
+                        <Icon
+                          size={17}
+                          strokeWidth={1.75}
+                          aria-hidden
+                          className={`relative shrink-0 transition-[color,transform] duration-300 ease-mercury group-hover:scale-110 motion-reduce:group-hover:scale-100 ${
+                            isActive ? 'text-periwinkle' : ''
+                          }`}
+                        />
+                        <span className={`relative ${fadeLabel(compact)}`}>{label}</span>
+                      </>
+                    )}
+                  </NavLink>
+                </Tooltip>
               ))}
             </div>
           </div>
@@ -148,35 +179,33 @@ function Sidebar({ compact = false, onClose }: { compact?: boolean; onClose?: ()
       </nav>
 
       {user && (
-        <div className={`shrink-0 border-t border-night-line ${compact ? 'flex flex-col items-center gap-2 py-3' : 'p-3'}`}>
+        <div className="shrink-0 border-t border-night-line">
           {compact ? (
-            <>
-              <span
-                className="flex h-9 w-9 items-center justify-center rounded-full bg-[rgba(156,180,232,0.2)] text-sm font-medium text-on-dark"
-                title={`${user.full_name} · ${user.email}`}
-                aria-hidden
-              >
-                {user.full_name.charAt(0).toUpperCase()}
-              </span>
-              <button onClick={logout} className="btn btn-glass btn-icon btn-sm" aria-label="Log out" title="Log out">
-                <LogOut size={15} />
-              </button>
-            </>
+            // Left-anchored on the rail's centre line, like the icons above
+            <div key="compact" className="flex animate-fade-in flex-col items-start gap-2 py-3 pl-[18px]">
+              <Tooltip label={`${user.full_name} · ${user.email}`}>
+                <span tabIndex={0} aria-label={`Signed in as ${user.full_name}`} className="rounded-full focus-visible:ring-2 focus-visible:ring-primary/60">
+                  <Avatar name={user.full_name} />
+                </span>
+              </Tooltip>
+              <Tooltip label="Log out">
+                <button onClick={logout} className="btn btn-glass btn-icon btn-sm ml-0.5" aria-label="Log out">
+                  <LogOut size={15} />
+                </button>
+              </Tooltip>
+            </div>
           ) : (
-            <div className="flex items-center gap-3 rounded-card px-2 py-1.5">
-              <span
-                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[rgba(156,180,232,0.2)] text-sm font-medium text-on-dark"
-                aria-hidden
-              >
-                {user.full_name.charAt(0).toUpperCase()}
-              </span>
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-book text-on-dark">{user.full_name}</p>
-                <p className="truncate text-xs text-fog/80">{user.email}</p>
+            <div key="full" className="animate-fade-in p-3">
+              <div className="flex items-center gap-3 rounded-card px-2 py-1.5">
+                <Avatar name={user.full_name} />
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-book text-on-dark">{user.full_name}</p>
+                  <p className="truncate text-xs text-fog/80">{user.email}</p>
+                </div>
+                <button onClick={logout} className="btn btn-glass btn-icon btn-sm" aria-label="Log out" title="Log out">
+                  <LogOut size={15} />
+                </button>
               </div>
-              <button onClick={logout} className="btn btn-glass btn-icon btn-sm" aria-label="Log out" title="Log out">
-                <LogOut size={15} />
-              </button>
             </div>
           )}
         </div>
@@ -210,9 +239,17 @@ function Breadcrumbs({ crumbs }: { crumbs: Crumb[] }) {
   );
 }
 
+/** Icon that swaps with a short pop when its state flips */
+const SwapIcon = ({ icon: Icon, swapKey }: { icon: LucideIcon; swapKey: string }) => (
+  <span key={swapKey} className="flex animate-pop-in">
+    <Icon size={18} strokeWidth={1.75} aria-hidden />
+  </span>
+);
+
 export default function Layout() {
   const [menuOpen, setMenuOpen] = useState(false);
   const location = useLocation();
+  const { collapsed, focusMode, toggleSidebar, toggleFocusMode } = useShellLayout();
   const crumbs = breadcrumbsFor(location.pathname);
   // Pages whose own header already offers "New workflow" don't repeat it in the top bar
   const hideTopCta = location.pathname === '/' || location.pathname === '/workflows';
@@ -228,15 +265,23 @@ export default function Layout() {
     return () => window.removeEventListener('keydown', onKey);
   }, [menuOpen]);
 
+  const sidebarLabel = focusMode ? 'Show sidebar' : collapsed ? 'Expand sidebar' : 'Collapse sidebar';
+  const focusLabel = focusMode ? 'Exit focus mode' : 'Enter focus mode';
+
   return (
     <div className="flex h-[100dvh] overflow-hidden bg-canvas">
-      {/* Desktop sidebar */}
-      <aside className="hidden w-64 shrink-0 lg:block">
-        <Sidebar />
-      </aside>
-      {/* Tablet icon rail */}
-      <aside className="hidden w-[72px] shrink-0 md:block lg:hidden">
-        <Sidebar compact />
+      {/* Sidebar (md and up): expanded, icon rail, or hidden in focus mode */}
+      <aside
+        id="app-sidebar"
+        data-state={focusMode ? 'hidden' : collapsed ? 'collapsed' : 'expanded'}
+        className={`relative hidden shrink-0 overflow-hidden bg-night transition-[width,visibility] duration-300 ease-mercury md:block ${
+          focusMode ? 'invisible w-0' : collapsed ? 'w-[72px]' : 'w-64'
+        }`}
+      >
+        {/* Fixed inner width: the aside clips it, so nothing reflows mid-transition */}
+        <div className="h-full w-64">
+          <Sidebar compact={collapsed} />
+        </div>
       </aside>
 
       {/* Mobile drawer */}
@@ -269,9 +314,20 @@ export default function Layout() {
           <button onClick={() => setMenuOpen(true)} className="btn btn-ghost btn-icon -ml-2 md:hidden" aria-label="Open navigation">
             <Menu size={19} />
           </button>
-          <div className="md:hidden">
-            <Link to="/" aria-label="AI Orchestrator home"><BrandMark /></Link>
+          <button
+            onClick={toggleSidebar}
+            className="btn btn-ghost btn-icon -ml-2 hidden md:inline-flex"
+            aria-label={sidebarLabel}
+            aria-controls="app-sidebar"
+            aria-expanded={!focusMode && !collapsed}
+            title={`${sidebarLabel} (${MOD_KEY}+B)`}
+          >
+            <SwapIcon icon={focusMode || collapsed ? PanelLeftOpen : PanelLeftClose} swapKey={focusMode || collapsed ? 'open' : 'close'} />
+          </button>
+          <div className={`items-center ${focusMode ? 'flex' : 'flex md:hidden'}`}>
+            <Link to="/" aria-label="AI Orchestrator home" className="animate-fade-in"><BrandMark /></Link>
           </div>
+          <div className="h-5 w-px shrink-0 bg-hairline max-md:hidden" aria-hidden />
           <div className="min-w-0 flex-1">
             <Breadcrumbs crumbs={crumbs} />
           </div>
@@ -282,11 +338,24 @@ export default function Layout() {
               <span className="sr-only sm:hidden">New workflow</span>
             </Link>
           )}
+          <button
+            onClick={toggleFocusMode}
+            className={`btn btn-icon -mr-2 hidden md:inline-flex ${focusMode ? 'btn-secondary' : 'btn-ghost'}`}
+            aria-label={focusLabel}
+            aria-pressed={focusMode}
+            title={`${focusLabel} (${MOD_KEY}+Shift+F)`}
+          >
+            <SwapIcon icon={focusMode ? Minimize2 : Maximize2} swapKey={focusMode ? 'min' : 'max'} />
+          </button>
         </header>
 
         <main className="flex-1 overflow-y-auto" id="main">
-          <div className="mx-auto w-full max-w-content px-4 pb-16 pt-6 sm:px-6 sm:pt-8 lg:px-10 lg:pt-10">
-            {/* Keyed by route: the entry plays on navigation, not on re-renders or live updates */}
+          <div
+            className={`mx-auto w-full px-4 pb-16 pt-6 transition-[max-width] duration-500 ease-mercury sm:px-6 sm:pt-8 lg:px-10 lg:pt-10 ${
+              focusMode ? 'max-w-[100vw]' : 'max-w-content'
+            }`}
+          >
+            {/* Keyed by route: the entry plays on navigation, not on re-renders, live updates or layout toggles */}
             <PageTransition key={location.pathname}>
               <Outlet />
             </PageTransition>

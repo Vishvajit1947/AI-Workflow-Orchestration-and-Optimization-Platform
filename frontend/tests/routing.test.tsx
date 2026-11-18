@@ -118,7 +118,9 @@ describe('ModelComparison page', () => {
 
     expect(screen.getByText('routable')).toBeInTheDocument();
     expect(screen.getByText('no API key')).toBeInTheDocument();
-    expect(screen.getByText('disabled')).toBeInTheDocument();
+    // Disabled models are never routed to, so they're left out of the registry
+    expect(screen.queryByText('disabled')).not.toBeInTheDocument();
+    expect(screen.queryByText('GPT-4o')).not.toBeInTheDocument();
     expect(screen.getByText('Routing: quality priority for generation')).toBeInTheDocument();
     expect(screen.getByText('fallback')).toBeInTheDocument();
   });
