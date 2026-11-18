@@ -5,7 +5,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, waitFor, act, within } from '@testing-library/react';
 import { applyExecutionEvent } from '../src/hooks/useExecutionStatus';
-import { DAGVisualization } from '../src/components/DAGVisualization';
+import { DAG_COLORS, DAGVisualization } from '../src/components/DAGVisualization';
 import { ExecutionControls } from '../src/components/ExecutionControls';
 import { ExecutionMonitor } from '../src/components/ExecutionMonitor';
 import { ExecutionConfigModal } from '../src/components/ExecutionConfigModal';
@@ -128,8 +128,8 @@ describe('DAGVisualization', () => {
     render(<DAGVisualization dag={dag} />);
     expect(screen.getByRole('img', { name: 'Workflow graph: 4 stages in 3 levels' })).toBeInTheDocument();
     for (const id of ['a', 'b', 'c', 'd']) expect(screen.getByTestId(`dag-node-${id}`)).toBeInTheDocument();
-    expect(screen.getByTestId('dag-edge-a-b').getAttribute('stroke')).toBe('#a78bfa');   // on critical path
-    expect(screen.getByTestId('dag-edge-a-c').getAttribute('stroke')).toBe('#475569');   // not
+    expect(screen.getByTestId('dag-edge-a-b').getAttribute('stroke')).toBe(DAG_COLORS.critical); // on critical path
+    expect(screen.getByTestId('dag-edge-a-c').getAttribute('stroke')).toBe(DAG_COLORS.edge);     // not
     expect(screen.getByText('⤚ merge')).toBeInTheDocument();
   });
 
@@ -153,11 +153,13 @@ describe('DAGVisualization', () => {
 
 describe('ExecutionControls', () => {
   it('offers pause and cancel while running', async () => {
-    vi.spyOn(window, 'confirm').mockReturnValue(true);
     render(<ExecutionControls executionId="exec-1" status="running" />);
     fireEvent.click(screen.getByRole('button', { name: /pause/i }));
     await waitFor(() => expect(execApi.pause).toHaveBeenCalledWith('exec-1'));
     fireEvent.click(screen.getByRole('button', { name: /cancel/i }));
+    // Cancelling asks for confirmation first
+    expect(execApi.cancel).not.toHaveBeenCalled();
+    fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Cancel execution' }));
     await waitFor(() => expect(execApi.cancel).toHaveBeenCalledWith('exec-1'));
   });
 
@@ -266,7 +268,7 @@ describe('StageEditor parallel stages', () => {
     const onUpdate = vi.fn();
     render(<StageEditor workflowId="wf-1" stages={workflowStages} onUpdate={onUpdate} />);
     // "up" arrow of the last stage (End, order 2) swaps with Right (order 1)
-    const endRow = screen.getByText('End').closest('.glass')!;
+    const endRow = screen.getByText('End').closest('[data-testid="stage-row"]')!;
     fireEvent.click(endRow.querySelectorAll('button')[0]);
 
     await waitFor(() => expect(onUpdate).toHaveBeenCalled());

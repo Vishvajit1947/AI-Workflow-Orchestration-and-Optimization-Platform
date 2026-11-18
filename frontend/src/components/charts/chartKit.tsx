@@ -2,21 +2,26 @@
  * Shared chart building blocks: color roles, the chart card (title, legend,
  * chart/table toggle, empty state), a container-width hook and the hover tooltip.
  *
- * Colors: the app is dark-only; series slots are the dark steps of the reference
- * categorical palette, validated (validate_palette.js) against the card surface #0b1224.
+ * Colors: charts sit on Mercury's white card surface. Slot 1 is Mercury Indigo, slot 2 the
+ * reference orange; validated (validate_palette.js --mode light --surface #ffffff): all checks
+ * pass (adjacent CVD ΔE 29.4, normal-vision ΔE 35.3, both >= 3:1 contrast).
  */
 import React, { useEffect, useRef, useState } from 'react';
+import { motion, useInView } from 'motion/react';
+import { fadeUp } from '../../lib/motion';
 import { BarChart3, Table2 } from 'lucide-react';
 
 export const CHART = {
-  series1: '#3987e5',        // blue
-  series2: '#d95926',        // orange
-  track: 'rgba(57,135,229,0.18)', // meter track: same ramp as series1, receded
-  grid: '#2e2e2e',           // hairline gridlines
-  baseline: '#3e3e3e',       // axis baseline
-  muted: '#94a3b8',          // axis labels
-  surface: '#1c1c1c',        // card surface (for surface gaps/rings)
-  crosshair: '#64748b',
+  series1: '#5266eb',        // Mercury Indigo
+  series2: '#eb6834',        // orange
+  track: 'rgba(82,102,235,0.14)', // meter track: same hue as series1, receded
+  grid: '#efeef5',           // hairline gridlines
+  baseline: '#d9d8e5',       // axis baseline
+  muted: '#6f6a8a',          // axis labels (ink-muted)
+  text: '#28253b',           // value labels (ink)
+  textSecondary: '#554e7b',  // category labels (ink-secondary)
+  surface: '#ffffff',        // card surface (for surface gaps/rings)
+  crosshair: '#9a97ad',
 };
 
 /** Status palette (reserved for state; always paired with an icon + label). */
@@ -78,17 +83,33 @@ export const ChartCard: React.FC<ChartCardProps> = ({
   title, subtitle, legend, empty, emptyText = 'No data in this range', table, children, className = '',
 }) => {
   const [showTable, setShowTable] = useState(false);
+  // Marks animate in once the chart is visible; afterwards value changes glide (viz-live)
+  const plot = useRef<HTMLDivElement>(null);
+  const inView = useInView(plot, { once: true, amount: 0.3 });
+  const [settled, setSettled] = useState(false);
+  useEffect(() => {
+    if (!inView) return;
+    const timer = setTimeout(() => setSettled(true), 1200);
+    return () => clearTimeout(timer);
+  }, [inView]);
   return (
-    <section className={`glass min-w-0 rounded-xl p-5 ${className}`} aria-label={title}>
-      <div className="flex items-start justify-between gap-3 mb-3">
-        <div>
-          <h3 className="font-semibold">{title}</h3>
-          {subtitle && <p className="text-xs text-surface-200/50 mt-0.5">{subtitle}</p>}
+    <motion.section
+      className={`card min-w-0 p-5 sm:p-6 ${className}`}
+      aria-label={title}
+      initial="hidden"
+      whileInView="show"
+      viewport={{ once: true, amount: 0.15 }}
+      variants={fadeUp}
+    >
+      <div className="mb-4 flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <h3 className="text-[15px] font-medium text-ink">{title}</h3>
+          {subtitle && <p className="mt-1 text-xs leading-relaxed text-ink-muted">{subtitle}</p>}
         </div>
         {table && !empty && (
           <button
             onClick={() => setShowTable(!showTable)}
-            className="flex items-center gap-1 text-xs text-surface-200/50 hover:text-white transition-colors shrink-0"
+            className="btn btn-ghost btn-sm -mr-2 -mt-1 shrink-0"
             aria-pressed={showTable}
           >
             {showTable ? <><BarChart3 size={13} /> Chart</> : <><Table2 size={13} /> Table</>}
@@ -96,7 +117,7 @@ export const ChartCard: React.FC<ChartCardProps> = ({
         )}
       </div>
       {legend && legend.length > 1 && !empty && !showTable && (
-        <div className="flex flex-wrap gap-4 mb-2 text-xs text-surface-200/70">
+        <div className="mb-3 flex flex-wrap gap-4 text-xs text-ink-secondary">
           {legend.map((item) => (
             <span key={item.label} className="flex items-center gap-1.5">
               {item.shape === 'line'
@@ -108,13 +129,13 @@ export const ChartCard: React.FC<ChartCardProps> = ({
         </div>
       )}
       {empty ? (
-        <div className="h-40 flex items-center justify-center text-sm text-surface-200/40">{emptyText}</div>
+        <div className="flex h-40 items-center justify-center rounded-card bg-lavender-soft text-sm text-ink-muted">{emptyText}</div>
       ) : showTable ? (
-        <div className="overflow-x-auto max-h-72">{table}</div>
+        <div className="max-h-72 animate-fade-in overflow-x-auto">{table}</div>
       ) : (
-        children
+        <div ref={plot} className={`viz-wait ${inView ? 'viz-in' : ''} ${settled ? 'viz-live' : ''}`}>{children}</div>
       )}
-    </section>
+    </motion.section>
   );
 };
 
@@ -124,18 +145,18 @@ export const DataTable: React.FC<{ headers: string[]; rows: (string | number)[][
 }) => (
   <div className="overflow-x-auto">
     <table className="w-full text-xs">
-      <thead className="text-surface-200/50 border-b border-surface-700/60">
+      <thead className="border-b border-hairline text-ink-muted">
         <tr>
           {headers.map((h, i) => (
-            <th key={h} className={`px-2 py-1.5 font-medium ${align?.[i] === 'left' ? 'text-left' : 'text-right'}`}>{h}</th>
+            <th key={h} className={`whitespace-nowrap px-2 py-2 text-[11px] font-semibold uppercase tracking-[0.05em] ${align?.[i] === 'left' ? 'text-left' : 'text-right'}`}>{h}</th>
           ))}
         </tr>
       </thead>
       <tbody className="tabular-nums">
         {rows.map((row, r) => (
-          <tr key={r} className="border-b border-surface-700/30">
+          <tr key={r} className="border-b border-hairline text-ink last:border-b-0">
             {row.map((cell, i) => (
-              <td key={i} className={`px-2 py-1.5 ${align?.[i] === 'left' ? 'text-left' : 'text-right'}`}>{cell}</td>
+              <td key={i} className={`px-2 py-2 ${align?.[i] === 'left' ? 'text-left' : 'text-right'}`}>{cell}</td>
             ))}
           </tr>
         ))}
@@ -158,15 +179,15 @@ export const ChartTooltip: React.FC<{ x: number; y: number; width: number; title
   return (
     <div
       role="tooltip"
-      className="absolute z-10 pointer-events-none rounded-lg border border-surface-700 bg-surface-900/95 px-3 py-2 text-xs shadow-lg"
+      className="pointer-events-none absolute z-10 animate-pop-in rounded-[10px] border border-hairline bg-surface px-3 py-2 text-xs shadow-pop"
       style={{ left: flip ? undefined : x + 12, right: flip ? width - x + 12 : undefined, top: Math.max(0, y - 10) }}
     >
-      <div className="text-surface-200/60 mb-1">{title}</div>
+      <div className="mb-1 text-ink-muted">{title}</div>
       {rows.map((row) => (
         <div key={row.label} className="flex items-center gap-2 whitespace-nowrap">
           {row.color && <span className="w-3 h-0.5 rounded" style={{ background: row.color }} />}
-          <span className="font-semibold text-white tabular-nums">{row.value}</span>
-          <span className="text-surface-200/60">{row.label}</span>
+          <span className="font-medium text-ink tabular-nums">{row.value}</span>
+          <span className="text-ink-muted">{row.label}</span>
         </div>
       ))}
     </div>

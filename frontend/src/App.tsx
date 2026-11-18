@@ -1,5 +1,6 @@
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { AuthProvider } from './contexts/AuthContext';
+import { MotionProvider } from './components/motion/Motion';
 import ProtectedRoute from './components/ProtectedRoute';
 import Layout from './components/Layout';
 import Login from './pages/Login';
@@ -18,33 +19,35 @@ import ProjectsPage from './pages/ProjectsPage';
 
 function App() {
   return (
-    <BrowserRouter>
-      <AuthProvider>
-        <Routes>
-          {/* Public routes */}
-          <Route path="/login" element={<Login />} />
-          <Route path="/signup" element={<Signup />} />
-          <Route path="/forgot-password" element={<ForgotPassword />} />
-          <Route path="/reset-password" element={<ResetPassword />} />
+    <MotionProvider>
+      <BrowserRouter>
+        <AuthProvider>
+          <Routes>
+            {/* Public routes */}
+            <Route path="/login" element={<Login />} />
+            <Route path="/signup" element={<Signup />} />
+            <Route path="/forgot-password" element={<ForgotPassword />} />
+            <Route path="/reset-password" element={<ResetPassword />} />
 
-          {/* Protected routes */}
-          <Route element={<ProtectedRoute />}>
-            <Route path="/" element={<Layout />}>
-              <Route index element={<ObjectiveInput />} />
-              <Route path="dashboard" element={<Dashboard />} />
-              <Route path="workflows" element={<WorkflowList />} />
-              <Route path="workflows/new" element={<WorkflowEditor />} />
-              <Route path="workflows/:id" element={<WorkflowDetail />} />
-              <Route path="workflows/:id/edit" element={<WorkflowEditor />} />
-              <Route path="cache" element={<CacheDashboard />} />
-              <Route path="models" element={<ModelComparison />} />
-              <Route path="executions" element={<ExecutionsPage />} />
-              <Route path="projects" element={<ProjectsPage />} />
+            {/* Protected routes */}
+            <Route element={<ProtectedRoute />}>
+              <Route path="/" element={<Layout />}>
+                <Route index element={<ObjectiveInput />} />
+                <Route path="dashboard" element={<Dashboard />} />
+                <Route path="workflows" element={<WorkflowList />} />
+                <Route path="workflows/new" element={<WorkflowEditor />} />
+                <Route path="workflows/:id" element={<WorkflowDetail />} />
+                <Route path="workflows/:id/edit" element={<WorkflowEditor />} />
+                <Route path="cache" element={<CacheDashboard />} />
+                <Route path="models" element={<ModelComparison />} />
+                <Route path="executions" element={<ExecutionsPage />} />
+                <Route path="projects" element={<ProjectsPage />} />
+              </Route>
             </Route>
-          </Route>
-        </Routes>
-      </AuthProvider>
-    </BrowserRouter>
+          </Routes>
+        </AuthProvider>
+      </BrowserRouter>
+    </MotionProvider>
   );
 }
 

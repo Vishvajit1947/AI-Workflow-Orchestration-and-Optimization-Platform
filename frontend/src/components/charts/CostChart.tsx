@@ -58,10 +58,15 @@ export const CostChart: React.FC<{ data: CostTrendPoint[] }> = ({ data }) => {
               {formatDay(p.date)}
             </text>
           ))}
-          <path d={area} fill={CHART.series1} opacity={0.1} />
-          <path d={line} fill="none" stroke={CHART.series1} strokeWidth={2} strokeLinejoin="round" strokeLinecap="round" />
+          {/* Line draws left to right, the wash fades in under it; keyed by length so a new range redraws */}
+          {/* 10% wash via fill-opacity, so the fade-in (which animates opacity) ends at the same tint */}
+          <path key={`area-${data.length}`} d={area} fill={CHART.series1} fillOpacity={0.1}
+                className="viz-mark animate-fade-in [animation-delay:0.35s] [animation-duration:0.8s]" />
+          <path key={`line-${data.length}`} d={line} fill="none" stroke={CHART.series1} strokeWidth={2} strokeLinejoin="round" strokeLinecap="round"
+                pathLength={1} className="viz-mark stroke-draw animate-draw" />
           {/* End marker + selective direct label on the latest day */}
-          <circle cx={x(last)} cy={y(data[last].cost)} r={4} fill={CHART.series1} stroke={CHART.surface} strokeWidth={2} />
+          <circle cx={x(last)} cy={y(data[last].cost)} r={4} fill={CHART.series1} stroke={CHART.surface} strokeWidth={2}
+                  className="viz-mark animate-fade-in [animation-delay:0.9s]" />
           {point && hover !== null && (
             <>
               <line x1={x(hover)} x2={x(hover)} y1={M.top} y2={M.top + plotH} stroke={CHART.crosshair} />

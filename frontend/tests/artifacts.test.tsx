@@ -100,11 +100,12 @@ describe('StageResult with a project artifact', () => {
     expect(screen.getByTestId('file-viewer')).toHaveTextContent('uvicorn main:app');
   });
 
-  it('collapses folders', () => {
+  it('collapses folders', async () => {
     render(<StageResult stage={stage({ artifact: project })} />);
     const explorer = screen.getByRole('navigation', { name: 'Generated files' });
     fireEvent.click(within(explorer).getByRole('button', { name: 'backend' }));
-    expect(within(explorer).queryByText('main.py')).toBeNull();
+    // The folder animates closed, then its files unmount
+    await waitFor(() => expect(within(explorer).queryByText('main.py')).toBeNull());
   });
 
   it('switches between generated files and the full output', () => {

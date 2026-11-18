@@ -287,8 +287,7 @@ describe('ExecutionResults', () => {
 
     const statusBadge = screen.getByTestId('execution-status');
     expect(statusBadge).toHaveTextContent('completed');
-    expect(statusBadge).toHaveClass('bg-primary-500/15');
-    expect(statusBadge).toHaveClass('text-primary-400');
+    expect(statusBadge).toHaveAttribute('data-tone', 'success');
   });
 
   it('displays stage order numbers', () => {
@@ -333,8 +332,7 @@ describe('ExecutionResults', () => {
 
     const statusBadge = screen.getByTestId('execution-status');
     expect(statusBadge).toHaveTextContent('failed');
-    expect(statusBadge).toHaveClass('bg-red-500/15');
-    expect(statusBadge).toHaveClass('text-red-300');
+    expect(statusBadge).toHaveAttribute('data-tone', 'danger');
     
     expect(screen.getByText('LLM API error')).toBeInTheDocument();
   });

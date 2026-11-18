@@ -2,7 +2,9 @@
  * Tabbed interface for viewing execution results.
  */
 import React, { useState } from 'react';
+import { motion } from 'motion/react';
 import { Database } from 'lucide-react';
+import { transition } from '../lib/motion';
 import type { ExecutionDetailResponse, StageExecutionDetail } from '../types/execution';
 import { ExecutionTimelineView } from './charts/TimelineChart';
 import { StageResult, usd } from './results/StageResult';
@@ -11,11 +13,12 @@ import { executionApi } from '../api/executionApi';
 import { safeFileStem } from '../lib/download';
 import type { Artifact } from '../types/execution';
 import { StatusBadge } from './ui/StatusBadge';
+import { Tabs } from './ui/Tabs';
 import { MetricCard } from './metrics/MetricCard';
 
 const CacheHitBadge: React.FC = () => (
-  <span className="px-2 py-1 bg-primary-500/15 text-primary-400 rounded text-xs font-medium flex items-center gap-1">
-    <Database size={12} />
+  <span className="inline-flex items-center gap-1 rounded-pill bg-primary/10 px-2 py-0.5 text-[11px] font-book text-primary-700">
+    <Database size={11} aria-hidden />
     Cache Hit
   </span>
 );
@@ -35,47 +38,44 @@ type TabId = (typeof TABS)[number]['id'];
 
 export const ExecutionResults: React.FC<ExecutionResultsProps> = ({ execution }) => {
   const [activeTab, setActiveTab] = useState<TabId>('stages');
+  const { summary } = execution;
 
   return (
-    <div className="glass rounded-xl p-5 text-white sm:p-6">
-      <div className="mb-5 flex flex-wrap items-start justify-between gap-3">
+    <section className="card min-w-0" aria-label="Execution results">
+      <div className="flex flex-wrap items-start justify-between gap-3 px-5 pt-5 sm:px-6">
         <div className="min-w-0">
-          <h2 className="text-lg font-semibold">Execution Results</h2>
-          <p className="mt-0.5 truncate font-mono text-xs text-surface-200/40" title="Execution ID">
-            {execution.summary.execution_id}
+          <h2 className="text-[17px] font-medium text-ink">Execution Results</h2>
+          <p className="mt-1 truncate font-mono text-xs text-ink-muted" title="Execution ID">
+            {summary.execution_id}
           </p>
         </div>
-        <StatusBadge status={execution.summary.status} data-testid="execution-status" />
+        <StatusBadge status={summary.status} data-testid="execution-status" />
       </div>
 
-      <div className="mb-6 overflow-x-auto border-b border-surface-700">
-        <div className="flex gap-5" role="tablist" aria-label="Execution result views">
-          {TABS.map((tab) => (
-            <button
-              key={tab.id}
-              role="tab"
-              aria-selected={activeTab === tab.id}
-              onClick={() => setActiveTab(tab.id)}
-              className={`-mb-px whitespace-nowrap border-b-2 px-1 pb-2 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:text-white ${
-                activeTab === tab.id
-                  ? 'border-primary-400 text-primary-400'
-                  : 'border-transparent text-surface-200/50 hover:text-white'
-              }`}
-            >
-              {tab.label}
-            </button>
-          ))}
-        </div>
-      </div>
+      <Tabs
+        className="mx-5 mt-4 sm:mx-6"
+        ariaLabel="Execution result views"
+        items={TABS.map((t) => ({ id: t.id, label: t.label }))}
+        value={activeTab}
+        onChange={setActiveTab}
+      />
 
-      {/* Tab content */}
-      {activeTab === 'stages' && (
-        <StagesTab stages={execution.stages} executionId={execution.summary.execution_id} artifact={execution.artifact ?? null} />
-      )}
-      {activeTab === 'timeline' && <ExecutionTimelineView executionId={execution.summary.execution_id} />}
-      {activeTab === 'context' && <ContextTab stages={execution.stages} />}
-      {activeTab === 'metrics' && <MetricsTab summary={execution.summary} stages={execution.stages} />}
-    </div>
+      <div className="p-5 sm:p-6">
+        {/* The new tab panel settles in with a small slide, like Mercury's tabbed sections (no wait on exit) */}
+        <motion.div
+          key={activeTab}
+          initial={{ opacity: 0, x: 8 }}
+          animate={{ opacity: 1, x: 0, transition: transition.enter }}
+        >
+            {activeTab === 'stages' && (
+              <StagesTab stages={execution.stages} executionId={summary.execution_id} artifact={execution.artifact ?? null} />
+            )}
+            {activeTab === 'timeline' && <ExecutionTimelineView executionId={summary.execution_id} />}
+            {activeTab === 'context' && <ContextTab stages={execution.stages} />}
+            {activeTab === 'metrics' && <MetricsTab summary={summary} stages={execution.stages} />}
+        </motion.div>
+      </div>
+    </section>
   );
 };
 
@@ -83,10 +83,10 @@ export const ExecutionResults: React.FC<ExecutionResultsProps> = ({ execution })
 const StagesTab: React.FC<{ stages: StageExecutionDetail[]; executionId: string; artifact: Artifact | null }> = ({
   stages, executionId, artifact,
 }) => (
-  <div className="space-y-5">
+  <div className="space-y-4">
     {artifact && artifact.files.length > 0 && (
-      <section aria-label="Combined project" className="rounded-xl border border-primary-500/30 bg-surface-800 px-5 py-4">
-        <p className="mb-3 text-xs text-surface-200/60">Files from all stages, combined into one project.</p>
+      <section aria-label="Combined project" className="rounded-card border border-primary/25 bg-primary/[0.03] px-4 py-4 sm:px-5">
+        <p className="mb-3 text-xs text-ink-secondary">Files from all stages, combined into one project.</p>
         <ArtifactOutput
           artifact={artifact}
           getZip={() => executionApi.downloadExecutionZip(executionId)}
@@ -103,50 +103,48 @@ const StagesTab: React.FC<{ stages: StageExecutionDetail[]; executionId: string;
 // --- Context Flow Tab ---
 const ContextTab: React.FC<{ stages: StageExecutionDetail[] }> = ({ stages }) => {
   return (
-    <div className="space-y-6">
-      <p className="text-surface-200/60 text-sm">
+    <div>
+      <p className="mb-5 text-sm text-ink-secondary">
         Shows how context (outputs) flow from stage to stage
       </p>
-      <div className="relative">
+      <ol>
         {stages.map((stage, index) => (
-          <div key={stage.id} className="flex items-start mb-6">
+          <li key={stage.id} className="flex items-stretch gap-4">
             {/* Timeline connector */}
-            <div className="flex flex-col items-center mr-4">
+            <div className="flex flex-col items-center">
               <div
-                className={`w-8 h-8 rounded-full flex items-center justify-center text-white font-semibold ${
+                className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[13px] tabular ${
                   stage.status === 'completed'
-                    ? 'bg-primary-500'
+                    ? 'bg-primary text-white'
                     : stage.status === 'failed'
-                    ? 'bg-red-500'
-                    : 'bg-surface-700'
+                    ? 'bg-danger text-white'
+                    : 'bg-lavender text-ink-secondary'
                 }`}
               >
                 {index + 1}
               </div>
-              {index < stages.length - 1 && (
-                <div className="w-0.5 h-16 bg-surface-700 my-2" />
-              )}
+              {index < stages.length - 1 && <div className="my-1.5 w-px flex-1 bg-hairline-strong" />}
             </div>
 
             {/* Stage card */}
-            <div className="flex-1 bg-surface-900/60 rounded-lg p-4">
-              <div className="flex items-center gap-2 mb-2">
-                <h4 className="font-semibold">{stage.stage_name}</h4>
+            <div className="mb-5 min-w-0 flex-1 rounded-card bg-lavender-soft p-4">
+              <div className="mb-2 flex flex-wrap items-center gap-2">
+                <h4 className="text-sm font-medium text-ink">{stage.stage_name}</h4>
                 {stage.cache_hit && <CacheHitBadge />}
               </div>
               {stage.result && (
-                <p className="text-sm text-surface-200/80 line-clamp-3">
+                <p className="line-clamp-3 text-sm leading-relaxed text-ink-secondary">
                   {stage.result.substring(0, 200)}
                   {stage.result.length > 200 && '...'}
                 </p>
               )}
-              <div className="mt-2 text-xs text-surface-200/50">
+              <div className="mt-2 text-xs text-ink-muted tabular">
                 {stage.total_tokens} tokens · {stage.latency_ms}ms
               </div>
             </div>
-          </div>
+          </li>
         ))}
-      </div>
+      </ol>
     </div>
   );
 };
@@ -167,7 +165,7 @@ const MetricsTab: React.FC<{
   return (
     <div className="space-y-6">
       {/* Summary cards */}
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-5">
         <MetricCard
           label="Total Duration"
           value={`${(summary.duration_ms || 0).toLocaleString()}ms`}
@@ -205,36 +203,36 @@ const MetricsTab: React.FC<{
 
       {/* Stage breakdown */}
       <div>
-        <h3 className="font-semibold mb-3">Stage Breakdown</h3>
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead className="bg-surface-900">
+        <h3 className="mb-3 text-[15px] font-medium text-ink">Stage Breakdown</h3>
+        <div className="overflow-x-auto rounded-card border border-hairline">
+          <table className="data-table tabular">
+            <thead>
               <tr>
-                <th className="px-4 py-2 text-left">#</th>
-                <th className="px-4 py-2 text-left">Stage</th>
-                <th className="px-4 py-2 text-left">Model</th>
-                <th className="px-4 py-2 text-left">Source</th>
-                <th className="px-4 py-2 text-right">Tokens</th>
-                <th className="px-4 py-2 text-right">Latency</th>
-                <th className="px-4 py-2 text-right">Cost</th>
+                <th>#</th>
+                <th>Stage</th>
+                <th>Model</th>
+                <th>Source</th>
+                <th className="!text-right">Tokens</th>
+                <th className="!text-right">Latency</th>
+                <th className="!text-right">Cost</th>
               </tr>
             </thead>
             <tbody>
               {stages.map((stage) => (
-                <tr key={stage.id} className="border-b border-surface-700">
-                  <td className="px-4 py-2">{stage.stage_order + 1}</td>
-                  <td className="px-4 py-2 font-medium">{stage.stage_name}</td>
-                  <td className="px-4 py-2 text-surface-200/60">{stage.model_used || 'N/A'}</td>
-                  <td className="px-4 py-2">
+                <tr key={stage.id}>
+                  <td className="text-ink-muted">{stage.stage_order + 1}</td>
+                  <td className="font-book text-ink">{stage.stage_name}</td>
+                  <td className="text-ink-secondary">{stage.model_used || 'N/A'}</td>
+                  <td>
                     {stage.cache_hit ? (
-                      <span className="text-primary-400 font-medium">Cache</span>
+                      <span className="font-book text-primary-700">Cache</span>
                     ) : (
-                      <span className="text-surface-200/60">{stage.provider || 'LLM'}</span>
+                      <span className="text-ink-secondary">{stage.provider || 'LLM'}</span>
                     )}
                   </td>
-                  <td className="px-4 py-2 text-right">{stage.total_tokens.toLocaleString()}</td>
-                  <td className="px-4 py-2 text-right">{stage.latency_ms || 0}ms</td>
-                  <td className="px-4 py-2 text-right">
+                  <td className="text-right">{stage.total_tokens.toLocaleString()}</td>
+                  <td className="text-right">{stage.latency_ms || 0}ms</td>
+                  <td className="text-right">
                     {usd(stage.estimated_cost)}
                   </td>
                 </tr>

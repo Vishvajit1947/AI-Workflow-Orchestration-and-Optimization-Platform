@@ -4,10 +4,11 @@
  * Markdown output is shown exactly as before.
  */
 import React, { useMemo, useState } from 'react';
-import { ChevronDown, ChevronRight, Download, FileCode2, FileText, Folder, Package } from 'lucide-react';
+import { ChevronRight, Download, FileCode2, FileText, Folder, FolderOpen, Package } from 'lucide-react';
 import type { Artifact, ArtifactFile } from '../../types/execution';
 import { downloadErrorMessage, saveBlob, saveTextFile } from '../../lib/download';
 import { CopyButton, MarkdownRenderer } from './MarkdownRenderer';
+import { Collapse } from '../motion/Motion';
 
 // ---------- download state shared by every download button ----------
 
@@ -28,12 +29,11 @@ export const useDownload = () => {
   return { busy, error, run };
 };
 
-const buttonClass =
-  'inline-flex items-center gap-1.5 rounded-md border border-surface-700 px-2.5 py-1 text-xs font-medium text-surface-200/80 hover:border-primary-500/40 hover:text-white disabled:opacity-50';
+const buttonClass = 'btn btn-outline btn-sm !h-7 !px-2.5 !text-xs';
 
 export const DownloadError: React.FC<{ message: string | null }> = ({ message }) =>
   message ? (
-    <p role="alert" className="mt-2 rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-1.5 text-xs text-amber-300">
+    <p role="alert" className="mt-2 rounded-[10px] border border-warning-line bg-warning-soft px-3 py-1.5 text-xs text-warning">
       Download failed: {message}
     </p>
   ) : null;
@@ -100,13 +100,15 @@ const TreeLevel: React.FC<{
                 onClick={() => toggle(node.path)}
                 aria-expanded={open}
                 style={pad}
-                className="flex w-full items-center gap-1.5 rounded py-1 pr-2 text-left text-xs text-surface-200/80 hover:bg-surface-700/40"
+                className="flex w-full items-center gap-1.5 rounded-md py-1.5 pr-2 text-left text-xs text-ink transition-colors duration-200 ease-soft hover:bg-lavender"
               >
-                {open ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
-                <Folder size={13} className="text-surface-200/50" />
+                <ChevronRight size={13} className={`text-ink-muted transition-transform duration-300 ease-mercury ${open ? 'rotate-90' : ''}`} />
+                {open ? <FolderOpen size={13} className="text-primary" /> : <Folder size={13} className="text-primary" />}
                 <span className="truncate">{node.name}</span>
               </button>
-              {open && <TreeLevel nodes={node.children} depth={depth + 1} selected={selected} onSelect={onSelect} />}
+              <Collapse open={open}>
+                <TreeLevel nodes={node.children} depth={depth + 1} selected={selected} onSelect={onSelect} />
+              </Collapse>
             </li>
           );
         }
@@ -119,11 +121,11 @@ const TreeLevel: React.FC<{
               aria-current={active ? 'true' : undefined}
               title={node.path}
               style={{ paddingLeft: `${depth * 14 + 25}px` }}
-              className={`flex w-full items-center gap-1.5 rounded py-1 pr-2 text-left font-mono text-xs ${
-                active ? 'bg-primary-500/15 text-primary-300' : 'text-surface-200/70 hover:bg-surface-700/40 hover:text-white'
+              className={`flex w-full items-center gap-1.5 rounded-md py-1.5 pr-2 text-left font-mono text-xs transition-colors duration-200 ease-soft ${
+                active ? 'bg-primary/10 text-primary-700' : 'text-ink-secondary hover:bg-lavender hover:text-ink'
               }`}
             >
-              <FileCode2 size={13} className="shrink-0" />
+              <FileCode2 size={13} className={`shrink-0 ${active ? 'text-primary' : 'text-ink-faint'}`} />
               <span className="truncate">{node.name}</span>
             </button>
           </li>
@@ -138,7 +140,7 @@ export const FileTree: React.FC<{ files: ArtifactFile[]; selected: string; onSel
 }) => {
   const tree = useMemo(() => buildFileTree(files), [files]);
   return (
-    <nav aria-label="Generated files" className="max-h-[32rem] overflow-y-auto rounded-lg border border-surface-700 bg-surface-900/40 p-2">
+    <nav aria-label="Generated files" className="max-h-[22rem] overflow-y-auto rounded-card border border-hairline bg-surface-tint p-2 md:max-h-[34rem]">
       <TreeLevel nodes={tree} depth={0} selected={selected} onSelect={onSelect} />
     </nav>
   );
@@ -155,9 +157,9 @@ const fenced = (file: ArtifactFile) => {
 };
 
 export const FileViewer: React.FC<{ file: ArtifactFile }> = ({ file }) => (
-  <div data-testid="file-viewer" className="min-w-0">
+  <div data-testid="file-viewer" key={file.path} className="min-w-0 animate-fade-in">
     <div className="flex items-center justify-between gap-2">
-      <p className="truncate font-mono text-xs text-surface-200/80" title={file.path}>{file.path}</p>
+      <p className="truncate font-mono text-xs text-ink-secondary" title={file.path}>{file.path}</p>
       <div className="flex shrink-0 items-center gap-1">
         <CopyButton text={file.content} label="Copy" />
         <button type="button" onClick={() => saveTextFile(file.content, file.path)} className={buttonClass}>
@@ -189,12 +191,12 @@ export const ArtifactOutput: React.FC<{
     <div data-testid="artifact-output" className="space-y-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex min-w-0 items-center gap-2">
-          <Package size={15} className="shrink-0 text-primary-400" />
-          <span className="text-[11px] font-semibold uppercase tracking-wider text-surface-200/50">
+          <Package size={15} className="shrink-0 text-primary" />
+          <span className="eyebrow">
             {TYPE_LABELS[artifact.artifact_type] ?? 'Files'}
           </span>
-          <span className="truncate text-sm font-semibold text-white">{artifact.name}</span>
-          <span className="text-xs text-surface-200/40">
+          <span className="truncate text-sm font-medium text-ink">{artifact.name}</span>
+          <span className="text-xs text-ink-muted">
             {artifact.files.length} file{artifact.files.length === 1 ? '' : 's'}
           </span>
         </div>
@@ -211,8 +213,8 @@ export const ArtifactOutput: React.FC<{
       </div>
       <DownloadError message={error} />
       {artifact.conflicts.length > 0 && (
-        <div className="rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-300">
-          <p className="font-semibold">Some stages wrote the same file; the later stage's version is used:</p>
+        <div className="rounded-[10px] border border-warning-line bg-warning-soft px-3 py-2 text-xs text-warning">
+          <p className="font-medium">Some stages wrote the same file; the later stage's version is used:</p>
           <ul className="mt-1 list-disc pl-5">
             {artifact.conflicts.map((c, i) => (
               <li key={`${c.path}-${i}`}>

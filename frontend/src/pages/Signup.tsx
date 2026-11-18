@@ -5,7 +5,7 @@ import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import AuthLayout from '../components/AuthLayout';
 import {
-  AuthHeading, FormAlert, PasswordField, PasswordStrength, SubmitButton, TextField, authLinkClass,
+  AuthHeading, CheckboxField, FormAlert, PasswordField, PasswordStrength, SubmitButton, TextField, authLinkClass,
 } from '../components/auth/AuthFields';
 import { useAuth } from '../hooks/useAuth';
 import { getErrorMessage } from '../lib/errors';
@@ -69,7 +69,7 @@ export default function Signup() {
           id="password" label="Password" autoComplete="new-password" required
           value={password} onChange={setPassword} aria-describedby="password-hint"
         >
-          <p id="password-hint" className="mt-1.5 text-xs text-gray-500">At least {MIN_PASSWORD_LENGTH} characters.</p>
+          <p id="password-hint" className="hint">At least {MIN_PASSWORD_LENGTH} characters.</p>
           <PasswordStrength password={password} />
         </PasswordField>
         <PasswordField
@@ -77,20 +77,14 @@ export default function Signup() {
           value={confirmPassword} onChange={setConfirmPassword}
         />
 
-        <label className="flex items-start gap-2 text-sm text-gray-700">
-          <input
-            type="checkbox"
-            checked={termsAccepted}
-            onChange={(e) => setTermsAccepted(e.target.checked)}
-            className="mt-0.5 h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
-          />
+        <CheckboxField checked={termsAccepted} onChange={setTermsAccepted}>
           I agree to the terms of service and privacy policy
-        </label>
+        </CheckboxField>
 
         <SubmitButton loading={loading}>Create account</SubmitButton>
       </form>
 
-      <p className="mt-8 text-center text-sm text-gray-600">
+      <p className="mt-8 text-center text-sm text-ink-secondary">
         Already have an account?{' '}
         <Link to="/login" className={authLinkClass}>Sign in</Link>
       </p>

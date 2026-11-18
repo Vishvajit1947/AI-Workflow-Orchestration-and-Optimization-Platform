@@ -5,7 +5,7 @@ import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import AuthLayout from '../components/AuthLayout';
 import {
-  AuthHeading, FormAlert, PasswordField, SubmitButton, TextField, authLinkClass,
+  AuthHeading, CheckboxField, FormAlert, PasswordField, SubmitButton, TextField, authLinkClass,
 } from '../components/auth/AuthFields';
 import { useAuth } from '../hooks/useAuth';
 import { getErrorMessage } from '../lib/errors';
@@ -49,15 +49,7 @@ export default function Login() {
         />
 
         <div className="flex items-center justify-between">
-          <label className="flex items-center gap-2 text-sm text-gray-700">
-            <input
-              type="checkbox"
-              checked={rememberMe}
-              onChange={(e) => setRememberMe(e.target.checked)}
-              className="h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
-            />
-            Remember me
-          </label>
+          <CheckboxField checked={rememberMe} onChange={setRememberMe}>Remember me</CheckboxField>
           <Link to="/forgot-password" className={`text-sm ${authLinkClass}`}>
             Forgot password?
           </Link>
@@ -66,7 +58,7 @@ export default function Login() {
         <SubmitButton loading={loading}>Sign in</SubmitButton>
       </form>
 
-      <p className="mt-8 text-center text-sm text-gray-600">
+      <p className="mt-8 text-center text-sm text-ink-secondary">
         Don't have an account?{' '}
         <Link to="/signup" className={authLinkClass}>Create one</Link>
       </p>

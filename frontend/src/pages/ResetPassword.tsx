@@ -75,7 +75,7 @@ export default function ResetPassword() {
             id="newPassword" label="New password" autoComplete="new-password" required
             value={newPassword} onChange={setNewPassword}
           >
-            <p className="mt-1.5 text-xs text-gray-500">At least {MIN_PASSWORD_LENGTH} characters.</p>
+            <p className="hint">At least {MIN_PASSWORD_LENGTH} characters.</p>
             <PasswordStrength password={newPassword} />
           </PasswordField>
           <PasswordField

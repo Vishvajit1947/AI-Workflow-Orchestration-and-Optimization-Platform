@@ -5,12 +5,15 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import {
   Database, CheckCircle2, TrendingUp, Coins, RefreshCw, Trash2, Clock,
-  Search, ChevronDown, ChevronRight, XCircle,
+  Search, ChevronRight,
 } from 'lucide-react';
 import { cacheApi } from '../api/cacheApi';
 import { getErrorMessage } from '../lib/errors';
 import { PageHeader } from '../components/ui/PageHeader';
 import { MetricCard } from '../components/metrics/MetricCard';
+import { EmptyState, ErrorState, LoadingState, Notice } from '../components/ui/States';
+import { useConfirm } from '../components/ui/Dialog';
+import { CHART } from '../components/charts/chartKit';
 import type { CacheEntry, CacheStats } from '../types/cache';
 
 const PAGE_SIZE = 25;
@@ -40,6 +43,7 @@ export default function CacheDashboard() {
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(0);
   const [expanded, setExpanded] = useState<string | null>(null);
+  const [confirm, confirmDialog] = useConfirm();
 
   const loadStats = useCallback(async () => {
     const data = await cacheApi.getStats();
@@ -93,8 +97,14 @@ export default function CacheDashboard() {
     }
   };
 
-  const handleClearCache = () => {
-    if (!confirm('Invalidate every cache entry? The next executions will call the LLM again.')) return;
+  const handleClearCache = async () => {
+    const ok = await confirm({
+      title: 'Clear the whole cache?',
+      message: 'Every cache entry is invalidated. The next executions will call the LLM again.',
+      confirmLabel: 'Clear cache',
+      destructive: true,
+    });
+    if (!ok) return;
     runAction(async () => {
       const result = await cacheApi.clearCache();
       return `Invalidated ${result.entries_invalidated} cache entries`;
@@ -107,8 +117,14 @@ export default function CacheDashboard() {
       return `Cleaned up ${result.entries_cleaned} expired entries`;
     });
 
-  const handleDeleteEntry = (entryId: string) => {
-    if (!confirm('Permanently delete this cache entry?')) return;
+  const handleDeleteEntry = async (entryId: string) => {
+    const ok = await confirm({
+      title: 'Delete this cache entry?',
+      message: 'The entry is removed permanently. Similar inputs will call the LLM again.',
+      confirmLabel: 'Delete entry',
+      destructive: true,
+    });
+    if (!ok) return;
     runAction(async () => {
       await cacheApi.deleteEntry(entryId);
       return 'Cache entry deleted';
@@ -128,14 +144,15 @@ export default function CacheDashboard() {
   return (
     <div>
       <PageHeader
+        eyebrow="Insights"
         title="Semantic Cache"
-        description="Stage results reused for similar inputs, invalidated when upstream outputs change"
+        description="Stage results reused for similar inputs, invalidated when upstream outputs change."
         actions={
           <>
-            <button onClick={() => loadAll()} disabled={busy} className="btn btn-secondary">
+            <button onClick={() => loadAll()} disabled={busy} className="btn btn-outline">
               <RefreshCw size={14} aria-hidden /> Refresh
             </button>
-            <button onClick={handleCleanupExpired} disabled={busy} className="btn bg-amber-500/10 text-amber-300 hover:bg-amber-500/20">
+            <button onClick={handleCleanupExpired} disabled={busy} className="btn btn-secondary">
               <Clock size={14} aria-hidden /> Cleanup Expired
             </button>
             <button onClick={handleClearCache} disabled={busy} className="btn btn-danger">
@@ -146,16 +163,13 @@ export default function CacheDashboard() {
       />
 
       {notice && (
-        <div role="status" className="mb-6 flex items-center justify-between glass rounded-lg px-4 py-3 text-sm">
-          <span>{notice}</span>
-          <button onClick={() => setNotice(null)} className="text-surface-200/50 hover:text-white" aria-label="Dismiss">
-            <XCircle size={16} />
-          </button>
-        </div>
+        <Notice tone={notice.startsWith('Failed') ? 'warning' : 'success'} className="mb-6" onDismiss={() => setNotice(null)}>
+          {notice}
+        </Notice>
       )}
 
-      {loading && <p className="text-sm text-surface-200/50">Loading cache data…</p>}
-      {error && <p role="alert" className="mb-6 text-sm text-red-400">Could not load the cache: {error}</p>}
+      {loading && <LoadingState label="Loading cache data…" />}
+      {error && <ErrorState className="mb-6" title="Could not load the cache" message={error} onRetry={() => loadAll()} />}
 
       {/* Stats */}
       {stats && (
@@ -189,21 +203,26 @@ export default function CacheDashboard() {
       {stats && <HitRateChart samples={samples} />}
 
       {/* Filters */}
-      <div className="flex flex-wrap gap-3 mb-4">
-        <div className="relative flex-1 min-w-[200px]">
-          <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-surface-200/40" />
+      <div className="mb-3 flex items-baseline justify-between gap-3">
+        <h2 className="text-[17px] font-medium text-ink">Entries</h2>
+      </div>
+      <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:flex-wrap">
+        <div className="relative min-w-0 flex-1 sm:min-w-[240px]">
+          <Search size={16} className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-ink-faint" aria-hidden />
           <input
             type="text"
+            aria-label="Search cache entries"
             placeholder="Search input, output or model on this page..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-full pl-9 pr-4 py-2 bg-surface-800/50 border border-surface-700/50 rounded-lg text-sm text-white placeholder:text-surface-200/30 focus:outline-none focus:border-primary-500/50 transition-colors"
+            className="input input-pill"
           />
         </div>
         <select
+          aria-label="Stage type"
           value={stageType}
           onChange={(e) => { setStageType(e.target.value); setPage(0); }}
-          className="px-3 py-2 bg-surface-800/50 border border-surface-700/50 rounded-lg text-sm text-white focus:outline-none focus:border-primary-500/50"
+          className="input rounded-pill sm:w-48"
         >
           <option value="">All stage types</option>
           {STAGE_TYPES.map((t) => (
@@ -211,9 +230,10 @@ export default function CacheDashboard() {
           ))}
         </select>
         <select
+          aria-label="Validity"
           value={validity}
           onChange={(e) => { setValidity(e.target.value as ValidityFilter); setPage(0); }}
-          className="px-3 py-2 bg-surface-800/50 border border-surface-700/50 rounded-lg text-sm text-white focus:outline-none focus:border-primary-500/50"
+          className="input rounded-pill sm:w-40"
         >
           <option value="">All entries</option>
           <option value="true">Valid only</option>
@@ -222,19 +242,19 @@ export default function CacheDashboard() {
       </div>
 
       {/* Entries table */}
-      <div className="glass rounded-xl overflow-x-auto">
-        <table className="w-full text-sm">
-          <thead className="text-surface-200/50 text-xs uppercase tracking-wide border-b border-surface-700/50">
+      <div className="card overflow-x-auto">
+        <table className="data-table">
+          <thead>
             <tr>
-              <th className="px-4 py-3 w-8" />
-              <th className="px-4 py-3 text-left">Stage Type</th>
-              <th className="px-4 py-3 text-left">Input</th>
-              <th className="px-4 py-3 text-left">Model</th>
-              <th className="px-4 py-3 text-right">Hits</th>
-              <th className="px-4 py-3 text-right">Tokens</th>
-              <th className="px-4 py-3 text-center">Status</th>
-              <th className="px-4 py-3 text-left">Created</th>
-              <th className="px-4 py-3" />
+              <th className="w-8"><span className="sr-only">Expand</span></th>
+              <th>Stage Type</th>
+              <th>Input</th>
+              <th className="hidden md:table-cell">Model</th>
+              <th className="!text-right">Hits</th>
+              <th className="hidden !text-right sm:table-cell">Tokens</th>
+              <th className="!text-center">Status</th>
+              <th className="hidden lg:table-cell">Created</th>
+              <th><span className="sr-only">Delete</span></th>
             </tr>
           </thead>
           <tbody>
@@ -252,15 +272,18 @@ export default function CacheDashboard() {
         </table>
 
         {!loading && visibleEntries.length === 0 && (
-          <div className="text-center py-12 text-surface-200/40">
-            <Database size={40} className="mx-auto mb-3 opacity-30" />
-            <p>No cache entries found</p>
-          </div>
+          <EmptyState
+            className="m-3"
+            compact
+            icon={Database}
+            title="No cache entries found"
+            description={query || stageType || validity ? 'Try clearing the search or filters.' : 'Results are cached automatically as stages run.'}
+          />
         )}
       </div>
 
       {/* Pagination */}
-      <div className="flex items-center justify-between mt-4 text-sm text-surface-200/50">
+      <div className="mt-4 flex items-center justify-between text-sm text-ink-muted">
         <span>
           Page {page + 1}
           {query && ` · ${visibleEntries.length} of ${entries.length} match search`}
@@ -269,19 +292,20 @@ export default function CacheDashboard() {
           <button
             onClick={() => setPage((p) => Math.max(0, p - 1))}
             disabled={page === 0}
-            className="px-3 py-1.5 bg-surface-700/50 hover:bg-surface-700 rounded-lg disabled:opacity-40"
+            className="btn btn-outline btn-sm"
           >
             Previous
           </button>
           <button
             onClick={() => setPage((p) => p + 1)}
             disabled={entries.length < PAGE_SIZE}
-            className="px-3 py-1.5 bg-surface-700/50 hover:bg-surface-700 rounded-lg disabled:opacity-40"
+            className="btn btn-outline btn-sm"
           >
             Next
           </button>
         </div>
       </div>
+      {confirmDialog}
     </div>
   );
 }
@@ -299,64 +323,65 @@ const EntryRow: React.FC<{
     <>
       <tr
         onClick={onToggle}
-        className="border-b border-surface-700/30 hover:bg-surface-700/20 cursor-pointer"
+        className={`cursor-pointer transition-colors hover:bg-lavender-soft ${expanded ? 'bg-lavender-soft' : ''}`}
+        aria-expanded={expanded}
       >
-        <td className="px-4 py-3 text-surface-200/40">
-          {expanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+        <td className="text-ink-faint">
+          <ChevronRight size={14} className={`transition-transform duration-300 ease-mercury ${expanded ? 'rotate-90' : ''}`} />
         </td>
-        <td className="px-4 py-3">
-          <span className="px-2 py-0.5 rounded-full text-xs bg-primary-500/15 text-primary-300">
+        <td>
+          <span className="chip !bg-primary/10 !text-primary-700">
             {entry.stage_type || 'n/a'}
           </span>
         </td>
-        <td className="px-4 py-3 text-surface-200/80 max-w-xs truncate" title={entry.input_text}>
+        <td className="max-w-[12rem] truncate text-ink sm:max-w-xs" title={entry.input_text}>
           {entry.input_text}
         </td>
-        <td className="px-4 py-3 text-surface-200/60">{entry.model_used || 'n/a'}</td>
-        <td className="px-4 py-3 text-right font-medium">{entry.hit_count}</td>
-        <td className="px-4 py-3 text-right text-surface-200/60">{(entry.result_tokens ?? 0).toLocaleString()}</td>
-        <td className="px-4 py-3 text-center">
+        <td className="hidden max-w-[11rem] truncate whitespace-nowrap text-ink-secondary md:table-cell" title={entry.model_used ?? undefined}>{entry.model_used || 'n/a'}</td>
+        <td className="text-right font-book tabular">{entry.hit_count}</td>
+        <td className="hidden text-right text-ink-secondary tabular sm:table-cell">{(entry.result_tokens ?? 0).toLocaleString()}</td>
+        <td className="text-center">
           {!entry.is_valid ? (
-            <span className="px-2 py-0.5 rounded-full text-xs bg-red-500/20 text-red-300">invalid</span>
+            <StatusPill tone="danger">invalid</StatusPill>
           ) : expired ? (
-            <span className="px-2 py-0.5 rounded-full text-xs bg-amber-500/20 text-amber-300">expired</span>
+            <StatusPill tone="warning">expired</StatusPill>
           ) : (
-            <span className="px-2 py-0.5 rounded-full text-xs bg-emerald-500/20 text-emerald-300">valid</span>
+            <StatusPill tone="success">valid</StatusPill>
           )}
         </td>
-        <td className="px-4 py-3 text-surface-200/50 whitespace-nowrap">
+        <td className="hidden whitespace-nowrap text-ink-muted lg:table-cell">
           {new Date(entry.created_at).toLocaleString()}
         </td>
-        <td className="px-4 py-3 text-right">
+        <td className="text-right">
           <button
             onClick={(e) => { e.stopPropagation(); onDelete(); }}
             disabled={disabled}
-            className="p-1 text-surface-200/50 hover:text-red-400 transition-colors disabled:opacity-40"
+            className="btn btn-ghost btn-icon btn-sm text-ink-faint hover:!text-danger"
             title="Delete entry"
+            aria-label="Delete entry"
           >
             <Trash2 size={14} />
           </button>
         </td>
       </tr>
       {expanded && (
-        <tr className="border-b border-surface-700/30 bg-surface-800/40">
-          <td />
-          <td colSpan={8} className="px-4 py-4">
-            <div className="grid md:grid-cols-2 gap-4">
-              <div>
-                <p className="text-xs uppercase tracking-wide text-surface-200/40 mb-1">Input</p>
-                <pre className="text-xs font-mono whitespace-pre-wrap text-surface-200/80 max-h-64 overflow-y-auto">
+        <tr className="bg-lavender-soft/50">
+          <td colSpan={9} className="!px-4 !py-4 sm:!pl-12">
+            <div className="grid animate-fade-in-up gap-4 md:grid-cols-2">
+              <div className="min-w-0">
+                <p className="eyebrow mb-2">Input</p>
+                <pre className="max-h-64 overflow-y-auto whitespace-pre-wrap break-words rounded-[10px] border border-hairline bg-surface p-3 font-mono text-xs leading-5 text-ink">
                   {entry.input_text}
                 </pre>
               </div>
-              <div>
-                <p className="text-xs uppercase tracking-wide text-surface-200/40 mb-1">Cached Output</p>
-                <pre className="text-xs font-mono whitespace-pre-wrap text-surface-200/80 max-h-64 overflow-y-auto">
+              <div className="min-w-0">
+                <p className="eyebrow mb-2">Cached Output</p>
+                <pre className="max-h-64 overflow-y-auto whitespace-pre-wrap break-words rounded-[10px] border border-hairline bg-surface p-3 font-mono text-xs leading-5 text-ink">
                   {entry.result}
                 </pre>
               </div>
             </div>
-            <p className="text-xs text-surface-200/40 mt-3">
+            <p className="mt-3 break-all text-xs text-ink-muted">
               ID {entry.id}
               {entry.expires_at && ` · Expires ${new Date(entry.expires_at).toLocaleString()}`}
             </p>
@@ -385,16 +410,16 @@ const HitRateChart: React.FC<{ samples: HitRateSample[] }> = ({ samples }) => {
     : '';
 
   return (
-    <div className="glass rounded-xl p-5 mb-6">
-      <div className="flex items-baseline justify-between mb-3">
+    <section className="card mb-8 p-5 sm:p-6" aria-label="Hit rate live">
+      <div className="mb-4 flex items-start justify-between gap-3">
         <div>
-          <h2 className="font-semibold">Hit Rate — Live</h2>
-          <p className="text-xs text-surface-200/40">
+          <h2 className="text-[15px] font-medium text-ink">Hit Rate — Live</h2>
+          <p className="mt-1 text-xs text-ink-muted">
             Sampled every {POLL_INTERVAL_MS / 1000}s while this page is open
           </p>
         </div>
         {latest && (
-          <span className="text-2xl font-bold text-primary-300">{(latest.hitRate * 100).toFixed(1)}%</span>
+          <span className="text-stat font-medium text-ink tabular">{(latest.hitRate * 100).toFixed(1)}%</span>
         )}
       </div>
       <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-28" preserveAspectRatio="none" role="img"
@@ -404,25 +429,35 @@ const HitRateChart: React.FC<{ samples: HitRateSample[] }> = ({ samples }) => {
             key={v}
             x1={pad} x2={width - pad}
             y1={pad + (1 - v) * (height - pad * 2)} y2={pad + (1 - v) * (height - pad * 2)}
-            stroke="currentColor" className="text-surface-700" strokeWidth={1} strokeDasharray="4 4"
+            stroke={CHART.grid} strokeWidth={1} strokeDasharray="4 4"
             vectorEffect="non-scaling-stroke"
           />
         ))}
-        {area && <polygon points={area} className="fill-primary-500/15" />}
+        {area && <polygon points={area} fill={CHART.series1} opacity={0.1} />}
         {points.length > 1 && (
-          <polyline points={line} fill="none" stroke="currentColor" className="text-primary-400"
+          <polyline points={line} fill="none" stroke={CHART.series1}
                     strokeWidth={2} vectorEffect="non-scaling-stroke" strokeLinejoin="round" />
         )}
         {points.map((p, i) => (
-          <circle key={i} cx={p.x} cy={p.y} r={3} className="fill-primary-300">
+          <circle key={i} cx={p.x} cy={p.y} r={3} fill={CHART.series1} stroke={CHART.surface} strokeWidth={1.5}>
             <title>{`${p.s.time.toLocaleTimeString()} — ${(p.s.hitRate * 100).toFixed(1)}%`}</title>
           </circle>
         ))}
       </svg>
-      <div className="flex justify-between text-xs text-surface-200/40 mt-1">
+      <div className="mt-1 flex justify-between text-xs text-ink-muted tabular">
         <span>{samples[0]?.time.toLocaleTimeString()}</span>
         <span>{samples.length > 1 && latest?.time.toLocaleTimeString()}</span>
       </div>
-    </div>
+    </section>
   );
 };
+
+const PILL_TONES = {
+  success: 'bg-success-soft text-success',
+  warning: 'bg-warning-soft text-warning',
+  danger: 'bg-danger-soft text-danger',
+};
+
+const StatusPill: React.FC<{ tone: keyof typeof PILL_TONES; children: React.ReactNode }> = ({ tone, children }) => (
+  <span className={`inline-flex rounded-pill px-2.5 py-0.5 text-xs font-book ${PILL_TONES[tone]}`}>{children}</span>
+);

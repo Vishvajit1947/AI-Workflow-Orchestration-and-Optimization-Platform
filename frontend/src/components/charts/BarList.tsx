@@ -46,12 +46,13 @@ export const BarList: React.FC<{ data: BarDatum[]; ariaLabel: string; color?: st
                onPointerEnter={() => setHover(i)} onPointerLeave={() => setHover(null)}
                onFocus={() => setHover(i)} onBlur={() => setHover(null)}>
               <rect x={0} y={i * ROW} width={width} height={ROW} fill="transparent" />
-              <text x={LABEL_W - 10} y={y + BAR / 2} dy="0.32em" textAnchor="end" fill="#cbd5e1" fontSize={12}>
+              <text x={LABEL_W - 10} y={y + BAR / 2} dy="0.32em" textAnchor="end" fill={CHART.textSecondary} fontSize={12}>
                 <title>{item.label}</title>
                 {item.label.length > MAX_LABEL_CHARS ? `${item.label.slice(0, MAX_LABEL_CHARS - 1)}…` : item.label}
               </text>
-              {w > 0 && <path d={barPath(w, y)} fill={color} opacity={hover === null || hover === i ? 1 : 0.55} />}
-              <text x={LABEL_W + w + 6} y={y + BAR / 2} dy="0.32em" fill="#e2e8f0" fontSize={12} className="tabular-nums">
+              {w > 0 && <path d={barPath(w, y)} fill={color} opacity={hover === null || hover === i ? 1 : 0.55}
+                               className="viz-mark fill-box origin-left animate-grow-x" style={{ animationDelay: `${i * 0.06}s` }} />}
+              <text x={LABEL_W + w + 6} y={y + BAR / 2} dy="0.32em" fill={CHART.text} fontSize={12} className="tabular-nums">
                 {item.display}
               </text>
             </g>

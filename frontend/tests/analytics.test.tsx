@@ -183,7 +183,9 @@ describe('Dashboard', () => {
     mockDashboard();
     api.getOverview.mockRejectedValue({ response: { data: { detail: 'database unavailable' } } });
     render(<MemoryRouter><Dashboard /></MemoryRouter>);
-    expect(await screen.findByText('Could not load analytics: database unavailable')).toBeInTheDocument();
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent('Could not load analytics');
+    expect(alert).toHaveTextContent('database unavailable');
   });
 });
 

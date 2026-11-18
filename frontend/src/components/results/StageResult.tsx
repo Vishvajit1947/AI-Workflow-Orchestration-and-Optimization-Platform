@@ -3,13 +3,14 @@
  * header → execution metrics → routing / cache → output.
  */
 import React, { useMemo, useState } from 'react';
-import { ChevronDown, ChevronRight, GitFork } from 'lucide-react';
+import { ChevronRight, GitFork } from 'lucide-react';
 import type { StageExecutionDetail } from '../../types/execution';
 import { formatDuration } from '../../lib/format';
 import { formatModelName, formatProvider, parseRoutingReason, type RoutingInfo } from '../../lib/resultFormat';
 import { buildOutline, CopyButton, MarkdownRenderer, type OutlineEntry } from './MarkdownRenderer';
 import { ArtifactOutput, DocumentDownloads } from './ArtifactOutput';
 import { executionApi } from '../../api/executionApi';
+import { Collapse } from '../motion/Motion';
 import { safeFileStem } from '../../lib/download';
 
 // Decimal fields arrive as strings from the API
@@ -19,16 +20,16 @@ type StageStatus = StageExecutionDetail['status'];
 
 // Icon + text for every status, so meaning never depends on colour alone
 export const STAGE_STATUS: Record<StageStatus, { icon: string; label: string; badge: string; text: string }> = {
-  completed: { icon: '✓', label: 'Completed', badge: 'bg-primary-500/10 text-primary-400 border-primary-500/30', text: 'text-primary-400' },
-  running: { icon: '⟳', label: 'Running', badge: 'bg-blue-500/10 text-blue-300 border-blue-500/30', text: 'text-blue-300' },
-  pending: { icon: '○', label: 'Pending', badge: 'bg-surface-700/40 text-surface-200/70 border-surface-700', text: 'text-surface-200/70' },
-  failed: { icon: '✕', label: 'Failed', badge: 'bg-red-500/10 text-red-300 border-red-500/30', text: 'text-red-300' },
-  skipped: { icon: '⚠', label: 'Skipped', badge: 'bg-amber-500/10 text-amber-300 border-amber-500/30', text: 'text-amber-300' },
-  cancelled: { icon: '⊘', label: 'Cancelled', badge: 'bg-surface-700/40 text-surface-200/60 border-surface-700', text: 'text-surface-200/60' },
+  completed: { icon: '✓', label: 'Completed', badge: 'bg-success-soft text-success border-success-line', text: 'text-success' },
+  running: { icon: '⟳', label: 'Running', badge: 'bg-info-soft text-info border-info-line', text: 'text-info' },
+  pending: { icon: '○', label: 'Pending', badge: 'bg-lavender-soft text-ink-secondary border-hairline-strong', text: 'text-ink-secondary' },
+  failed: { icon: '✕', label: 'Failed', badge: 'bg-danger-soft text-danger border-danger-line', text: 'text-danger' },
+  skipped: { icon: '⚠', label: 'Skipped', badge: 'bg-warning-soft text-warning border-warning-line', text: 'text-warning' },
+  cancelled: { icon: '⊘', label: 'Cancelled', badge: 'bg-lavender-soft text-ink-muted border-hairline-strong', text: 'text-ink-muted' },
 };
 
 const SectionLabel: React.FC<{ children: React.ReactNode; className?: string }> = ({ children, className = '' }) => (
-  <p className={`text-[11px] font-semibold uppercase tracking-wider text-surface-200/50 ${className}`}>{children}</p>
+  <p className={`text-[11px] font-semibold uppercase tracking-[0.06em] text-ink-muted ${className}`}>{children}</p>
 );
 
 // ---------- Level 1: header ----------
@@ -36,12 +37,12 @@ const SectionLabel: React.FC<{ children: React.ReactNode; className?: string }> 
 const RoutingChip: React.FC<{ stage: StageExecutionDetail }> = ({ stage }) => {
   if (stage.cache_hit || !stage.routing_reason) return null;
   const [label, color] = stage.was_user_override
-    ? ['Override', 'text-surface-200/80 border-surface-700']
+    ? ['Override', 'bg-[rgba(112,115,147,0.1)] text-ink-secondary']
     : stage.was_fallback
-    ? ['Fallback', 'text-amber-300 border-amber-500/30']
-    : ['Routed', 'text-surface-200/80 border-surface-700'];
+    ? ['Fallback', 'bg-warning-soft text-warning']
+    : ['Routed', 'bg-[rgba(112,115,147,0.1)] text-ink-secondary'];
   return (
-    <span data-testid="routing-chip" title={stage.routing_reason} className={`inline-flex items-center gap-1 rounded border px-1.5 py-0.5 text-[11px] font-medium ${color}`}>
+    <span data-testid="routing-chip" title={stage.routing_reason} className={`inline-flex items-center gap-1 rounded-pill px-2 py-0.5 text-[11px] font-book ${color}`}>
       <GitFork size={11} />
       {label}
     </span>
@@ -56,19 +57,19 @@ export const StageHeader: React.FC<{
 }> = ({ stage, expanded, onToggle, bodyId }) => {
   const status = STAGE_STATUS[stage.status] ?? STAGE_STATUS.pending;
   return (
-    <div className="flex items-start gap-3 px-5 py-4">
+    <div className="flex items-start gap-3 px-4 py-4 sm:px-5">
       <span
         aria-hidden
-        className={`mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full border text-sm font-bold ${status.badge}`}
+        className={`mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full border text-sm ${status.badge}`}
       >
         {status.icon}
       </span>
       <div className="min-w-0 flex-1">
-        <h3 className="break-words text-lg font-semibold leading-snug text-white">{stage.stage_name}</h3>
-        <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-surface-200/50">
-          <span className="font-medium">Stage {stage.stage_order + 1}</span>
+        <h3 className="break-words text-base font-medium leading-snug text-ink">{stage.stage_name}</h3>
+        <div className="mt-1.5 flex flex-wrap items-center gap-2 text-xs text-ink-muted">
+          <span className="font-book">Stage {stage.stage_order + 1}</span>
           {stage.cache_hit && (
-            <span className="inline-flex items-center gap-1 rounded border border-primary-500/30 px-1.5 py-0.5 text-[11px] font-medium text-primary-400">
+            <span className="inline-flex items-center gap-1 rounded-pill bg-primary/10 px-2 py-0.5 text-[11px] font-book text-primary-700">
               ▣ Cache Hit
             </span>
           )}
@@ -78,7 +79,7 @@ export const StageHeader: React.FC<{
       <div className="flex shrink-0 items-center gap-1">
         <span
           data-testid="stage-status"
-          className={`inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-xs font-semibold uppercase tracking-wide ${status.badge}`}
+          className={`hidden items-center gap-1.5 rounded-pill border px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.05em] sm:inline-flex ${status.badge}`}
         >
           <span aria-hidden className={stage.status === 'running' ? 'inline-block animate-spin' : ''}>{status.icon}</span>
           {status.label}
@@ -89,9 +90,9 @@ export const StageHeader: React.FC<{
           aria-expanded={expanded}
           aria-controls={bodyId}
           aria-label={expanded ? `Collapse ${stage.stage_name}` : `Expand ${stage.stage_name}`}
-          className="rounded p-1.5 text-surface-200/50 hover:bg-surface-700/60 hover:text-white"
+          className="btn btn-ghost btn-icon btn-sm"
         >
-          {expanded ? <ChevronDown size={18} /> : <ChevronRight size={18} />}
+          <ChevronRight size={18} className={`transition-transform duration-300 ease-mercury ${expanded ? 'rotate-90' : ''}`} />
         </button>
       </div>
     </div>
@@ -106,11 +107,11 @@ const Metric: React.FC<{
   sub?: React.ReactNode;
   title?: string;
   valueClass?: string;
-}> = ({ label, value, sub, title, valueClass = 'text-white' }) => (
-  <div className="min-w-0 rounded-lg border border-surface-700 bg-surface-900/40 px-3.5 py-2.5" title={title}>
+}> = ({ label, value, sub, title, valueClass = 'text-ink' }) => (
+  <div className="min-w-0 rounded-[10px] bg-lavender-soft px-3.5 py-2.5" title={title}>
     <SectionLabel>{label}</SectionLabel>
-    <p className={`mt-1 truncate text-base font-semibold tabular-nums ${valueClass}`}>{value}</p>
-    {sub != null && <p className="mt-0.5 truncate text-xs text-surface-200/50">{sub}</p>}
+    <p className={`mt-1 truncate text-[15px] font-medium tabular-nums ${valueClass}`}>{value}</p>
+    {sub != null && <p className="mt-0.5 truncate text-xs text-ink-muted">{sub}</p>}
   </div>
 );
 
@@ -157,7 +158,7 @@ export const ExecutionMetrics: React.FC<{ stage: StageExecutionDetail; routing: 
         label="Routing"
         value={routingLabel(stage, routing)}
         sub={routing?.score ? `score ${routing.score}` : undefined}
-        valueClass={routing?.strategy === 'Fallback' ? 'text-amber-300' : 'text-white'}
+        valueClass={routing?.strategy === 'Fallback' ? 'text-warning' : 'text-ink'}
       />
       <Metric
         label="Cache"
@@ -167,7 +168,7 @@ export const ExecutionMetrics: React.FC<{ stage: StageExecutionDetail; routing: 
             ? `${(stage.cache_similarity * 100).toFixed(2)}% similar`
             : stage.cache_hit ? 'reused result' : 'executed live'
         }
-        valueClass={stage.cache_hit ? 'text-primary-400' : 'text-surface-200/80'}
+        valueClass={stage.cache_hit ? 'text-primary-700' : 'text-ink-secondary'}
       />
       <Metric
         label="Duration"
@@ -182,13 +183,13 @@ export const ExecutionMetrics: React.FC<{ stage: StageExecutionDetail; routing: 
 
 const Row: React.FC<{ label: string; children: React.ReactNode; mono?: boolean }> = ({ label, children, mono }) => (
   <div className="flex gap-3 py-1 text-sm">
-    <dt className="w-24 shrink-0 text-surface-200/50">{label}</dt>
-    <dd className={`min-w-0 text-surface-200/90 ${mono ? 'break-all font-mono text-xs leading-5' : 'break-words'}`}>{children}</dd>
+    <dt className="w-24 shrink-0 text-ink-muted">{label}</dt>
+    <dd className={`min-w-0 text-ink ${mono ? 'break-all font-mono text-xs leading-5' : 'break-words'}`}>{children}</dd>
   </div>
 );
 
 export const RoutingDecision: React.FC<{ stage: StageExecutionDetail; routing: RoutingInfo }> = ({ stage, routing }) => (
-  <div data-testid="routing-decision" className="min-w-0 rounded-lg border border-surface-700 bg-surface-900/40 px-4 py-3">
+  <div data-testid="routing-decision" className="min-w-0 rounded-card border border-hairline px-4 py-3">
     <SectionLabel className="mb-1.5">Routing decision</SectionLabel>
     <dl>
       <Row label="Strategy">{routing.strategy}</Row>
@@ -198,7 +199,7 @@ export const RoutingDecision: React.FC<{ stage: StageExecutionDetail; routing: R
       {stage.model_used && (
         <Row label="Model ID" mono>
           {stage.model_used}
-          {stage.provider && <span className="text-surface-200/40"> ({stage.provider})</span>}
+          {stage.provider && <span className="text-ink-muted"> ({stage.provider})</span>}
         </Row>
       )}
       {routing.detail && <Row label="Reason">{routing.detail}</Row>}
@@ -207,17 +208,17 @@ export const RoutingDecision: React.FC<{ stage: StageExecutionDetail; routing: R
 );
 
 export const CacheStatus: React.FC<{ stage: StageExecutionDetail }> = ({ stage }) => (
-  <div data-testid="cache-status" className="min-w-0 rounded-lg border border-surface-700 bg-surface-900/40 px-4 py-3">
+  <div data-testid="cache-status" className="min-w-0 rounded-card border border-hairline px-4 py-3">
     <SectionLabel className="mb-1.5">Cache</SectionLabel>
     {stage.cache_hit ? (
       <>
-        <p className="text-sm font-semibold text-primary-400">▣ HIT</p>
-        <p className="mt-0.5 text-sm text-surface-200/70">
+        <p className="text-sm font-medium text-primary-700">▣ HIT</p>
+        <p className="mt-0.5 text-sm text-ink-secondary">
           Reused a previous valid stage result
           {stage.cache_similarity != null && <> · similarity {(stage.cache_similarity * 100).toFixed(2)}%</>}
         </p>
         {(stage.tokens_saved != null || stage.cost_saved != null) && (
-          <p className="mt-1 text-xs text-surface-200/50">
+          <p className="mt-1 text-xs text-ink-muted">
             Saved {stage.tokens_saved != null && `${stage.tokens_saved.toLocaleString()} tokens`}
             {stage.tokens_saved != null && stage.cost_saved != null && ' · '}
             {stage.cost_saved != null && usd(stage.cost_saved)}
@@ -226,8 +227,8 @@ export const CacheStatus: React.FC<{ stage: StageExecutionDetail }> = ({ stage }
       </>
     ) : (
       <>
-        <p className="text-sm font-semibold text-surface-200/80">○ MISS</p>
-        <p className="mt-0.5 text-sm text-surface-200/70">Executed stage using the selected model</p>
+        <p className="text-sm font-medium text-ink-secondary">○ MISS</p>
+        <p className="mt-0.5 text-sm text-ink-secondary">Executed stage using the selected model</p>
       </>
     )}
   </div>
@@ -240,16 +241,16 @@ const LONG_OUTPUT_CHARS = 1500;
 const OutlineNav: React.FC<{ entries: OutlineEntry[] }> = ({ entries }) => (
   <nav
     aria-label="Output sections"
-    className="sticky top-0 z-10 -mx-5 mb-2 flex items-center gap-2 border-y border-surface-700 bg-surface-800/95 px-5 py-2 backdrop-blur"
+    className="sticky top-0 z-10 -mx-4 mb-2 flex items-center gap-2 border-y border-hairline bg-surface/95 px-4 py-2 backdrop-blur sm:-mx-5 sm:px-5"
   >
-    <span className="shrink-0 text-[11px] font-semibold uppercase tracking-wider text-surface-200/40">Jump to</span>
+    <span className="eyebrow shrink-0">Jump to</span>
     <div className="flex min-w-0 gap-1.5 overflow-x-auto">
       {entries.map((entry) => (
         <button
           key={entry.id}
           type="button"
           onClick={() => document.getElementById(entry.id)?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
-          className="shrink-0 rounded-md border border-surface-700 px-2 py-0.5 text-xs text-surface-200/70 hover:border-primary-500/40 hover:text-white"
+          className="shrink-0 rounded-pill bg-[rgba(112,115,147,0.1)] px-2.5 py-1 text-xs text-ink-secondary hover:bg-primary/10 hover:text-ink"
         >
           {entry.text}
         </button>
@@ -279,14 +280,14 @@ export const OutputSection: React.FC<{ stage: StageExecutionDetail; executionId?
 
   if (stage.status === 'failed' && stage.error_message) {
     return (
-      <div className="rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3">
-        <SectionLabel className="!text-red-300/80">✕ Error</SectionLabel>
-        <p className="mt-1.5 whitespace-pre-wrap break-words font-mono text-sm text-red-300">{stage.error_message}</p>
+      <div className="rounded-card border border-danger-line bg-danger-soft px-4 py-3">
+        <SectionLabel className="!text-danger">✕ Error</SectionLabel>
+        <p className="mt-1.5 whitespace-pre-wrap break-words font-mono text-[13px] leading-5 text-danger">{stage.error_message}</p>
       </div>
     );
   }
   if (!stage.result) {
-    return <p className="text-sm text-surface-200/50">{NO_OUTPUT[stage.status] ?? 'No output.'}</p>;
+    return <p className="rounded-card bg-lavender-soft px-4 py-3 text-sm text-ink-muted">{NO_OUTPUT[stage.status] ?? 'No output.'}</p>;
   }
 
   const words = stage.result.trim().split(/\s+/).length;
@@ -294,13 +295,13 @@ export const OutputSection: React.FC<{ stage: StageExecutionDetail; executionId?
   const showFiles = artifact !== null && view === 'files';
   const canDownload = executionId !== undefined && stage.status === 'completed';
   const tabClass = (active: boolean) =>
-    `rounded-md px-2.5 py-1 text-xs font-medium ${active ? 'bg-surface-700 text-white' : 'text-surface-200/60 hover:text-white'}`;
+    `rounded-pill px-3 py-1 text-xs font-book ${active ? 'bg-surface text-ink shadow-soft' : 'text-ink-secondary hover:text-ink'}`;
   return (
     <section aria-label={`${stage.stage_name} output`}>
       <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-baseline gap-2">
-          <h4 className="text-xs font-bold uppercase tracking-[0.14em] text-white">Output</h4>
-          <span className="text-xs text-surface-200/40">{words.toLocaleString()} words</span>
+          <h4 className="text-[11px] font-semibold uppercase tracking-[0.08em] text-ink">Output</h4>
+          <span className="text-xs text-ink-muted">{words.toLocaleString()} words</span>
         </div>
         <div className="flex items-start gap-2">
           {canDownload && (
@@ -313,7 +314,7 @@ export const OutputSection: React.FC<{ stage: StageExecutionDetail; executionId?
         </div>
       </div>
       {artifact && (
-        <div role="group" aria-label="Output view" className="mb-3 inline-flex gap-1 rounded-lg border border-surface-700 p-0.5">
+        <div role="group" aria-label="Output view" className="mb-3 inline-flex gap-1 rounded-pill bg-[rgba(112,115,147,0.1)] p-1">
           <button type="button" aria-pressed={showFiles} onClick={() => setView('files')} className={tabClass(showFiles)}>
             View generated files ({artifact.files.length})
           </button>
@@ -351,14 +352,14 @@ export const StageResult: React.FC<{ stage: StageExecutionDetail; executionId?: 
   const retries = stage.retry_count ?? 0;
 
   return (
-    <article data-testid="stage-result" className="rounded-xl border border-surface-700 bg-surface-800">
+    <article data-testid="stage-result" className="rounded-card border border-hairline bg-surface">
       <StageHeader stage={stage} expanded={expanded} onToggle={() => setExpanded((e) => !e)} bodyId={bodyId} />
-      {expanded && (
-        <div id={bodyId} className="space-y-4 border-t border-surface-700 px-5 pb-6 pt-4">
+      <Collapse open={expanded}>
+        <div id={bodyId} className="space-y-4 border-t border-hairline px-4 pb-5 pt-4 sm:px-5 sm:pb-6">
           <ExecutionMetrics stage={stage} routing={routing} />
 
           {retries > 0 && (
-            <p className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-300">
+            <p className="rounded-card border border-warning-line bg-warning-soft px-3.5 py-2 text-sm text-warning">
               ⚠ {retries} failed attempt{retries === 1 ? '' : 's'}
               {stage.fallback_from && ` · fell back from ${stage.fallback_from}`}
             </p>
@@ -371,11 +372,11 @@ export const StageResult: React.FC<{ stage: StageExecutionDetail; executionId?: 
             </div>
           )}
 
-          <div className="border-t-2 border-surface-700 pt-5">
+          <div className="border-t border-hairline pt-5">
             <OutputSection stage={stage} executionId={executionId} />
           </div>
         </div>
-      )}
+      </Collapse>
     </article>
   );
 };

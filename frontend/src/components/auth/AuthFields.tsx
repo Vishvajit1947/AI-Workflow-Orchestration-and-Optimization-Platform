@@ -3,12 +3,9 @@
  */
 import React, { useState } from 'react';
 import { Eye, EyeOff, Loader2 } from 'lucide-react';
+import { Notice } from '../ui/States';
 
-const INPUT =
-  'w-full rounded-lg border border-gray-300 px-4 py-2.5 text-gray-900 placeholder:text-gray-400 ' +
-  'focus:border-transparent focus:outline-none focus:ring-2 focus:ring-primary-500';
-
-const LABEL = 'mb-1.5 block text-sm font-medium text-gray-700';
+const INPUT = 'input h-[46px] px-4 text-[15px]';
 
 interface FieldProps extends Omit<React.InputHTMLAttributes<HTMLInputElement>, 'onChange'> {
   id: string;
@@ -19,7 +16,7 @@ interface FieldProps extends Omit<React.InputHTMLAttributes<HTMLInputElement>, '
 
 export const TextField: React.FC<FieldProps> = ({ id, label, onChange, ...input }) => (
   <div>
-    <label htmlFor={id} className={LABEL}>{label}</label>
+    <label htmlFor={id} className="label">{label}</label>
     <input id={id} className={INPUT} onChange={(e) => onChange(e.target.value)} {...input} />
   </div>
 );
@@ -30,7 +27,7 @@ export const PasswordField: React.FC<Omit<FieldProps, 'type'> & { children?: Rea
   const [visible, setVisible] = useState(false);
   return (
     <div>
-      <label htmlFor={id} className={LABEL}>{label}</label>
+      <label htmlFor={id} className="label">{label}</label>
       <div className="relative">
         <input
           id={id}
@@ -42,10 +39,10 @@ export const PasswordField: React.FC<Omit<FieldProps, 'type'> & { children?: Rea
         <button
           type="button"
           onClick={() => setVisible((v) => !v)}
-          className="absolute right-3 top-1/2 -translate-y-1/2 rounded text-gray-500 hover:text-gray-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
+          className="btn btn-ghost btn-icon btn-sm absolute right-2 top-1/2 -translate-y-1/2"
           aria-label={visible ? `Hide ${label.toLowerCase()}` : `Show ${label.toLowerCase()}`}
         >
-          {visible ? <EyeOff size={20} /> : <Eye size={20} />}
+          {visible ? <EyeOff size={17} /> : <Eye size={17} />}
         </button>
       </div>
       {children}
@@ -55,10 +52,10 @@ export const PasswordField: React.FC<Omit<FieldProps, 'type'> & { children?: Rea
 
 const STRENGTH = [
   { label: '', color: '' },
-  { label: 'Weak', color: 'bg-red-500' },
-  { label: 'Fair', color: 'bg-yellow-500' },
-  { label: 'Good', color: 'bg-blue-500' },
-  { label: 'Strong', color: 'bg-green-500' },
+  { label: 'Weak', color: 'bg-danger' },
+  { label: 'Fair', color: 'bg-[#d08a1c]' },
+  { label: 'Good', color: 'bg-periwinkle' },
+  { label: 'Strong', color: 'bg-primary' },
 ];
 
 const passwordStrength = (pwd: string): number => {
@@ -76,44 +73,45 @@ export const PasswordStrength: React.FC<{ password: string }> = ({ password }) =
   if (!password) return null;
   const score = passwordStrength(password);
   return (
-    <div className="mt-2">
-      <div className="mb-1 flex gap-1" aria-hidden>
+    <div className="mt-2.5">
+      <div className="mb-1.5 flex gap-1" aria-hidden>
         {[1, 2, 3, 4].map((level) => (
-          <div key={level} className={`h-1 flex-1 rounded ${level <= score ? STRENGTH[score].color : 'bg-gray-200'}`} />
+          <div key={level} className={`h-1 flex-1 rounded-full ${level <= score ? STRENGTH[score].color : 'bg-lavender'}`} />
         ))}
       </div>
-      <p className="text-xs text-gray-600">Password strength: {STRENGTH[score].label || 'Too weak'}</p>
+      <p className="text-xs text-ink-muted">Password strength: {STRENGTH[score].label || 'Too weak'}</p>
     </div>
   );
 };
 
 export const FormAlert: React.FC<{ tone: 'error' | 'success'; children: React.ReactNode }> = ({ tone, children }) => (
-  <div
-    role={tone === 'error' ? 'alert' : 'status'}
-    className={`mb-6 rounded-lg border p-4 text-sm ${
-      tone === 'error' ? 'border-red-200 bg-red-50 text-red-700' : 'border-green-200 bg-green-50 text-green-700'
-    }`}
-  >
-    {children}
-  </div>
+  <Notice tone={tone === 'error' ? 'danger' : 'success'} className="mb-6">{children}</Notice>
 );
 
 export const SubmitButton: React.FC<{ loading: boolean; children: React.ReactNode }> = ({ loading, children }) => (
-  <button
-    type="submit"
-    disabled={loading}
-    className="flex w-full items-center justify-center gap-2 rounded-lg bg-primary-600 py-2.5 font-medium text-white transition-colors hover:bg-primary-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-  >
-    {loading && <Loader2 size={18} className="animate-spin" />}
+  <button type="submit" disabled={loading} className="btn btn-primary h-[46px] w-full text-[15px]">
+    {loading && <Loader2 size={17} className="animate-spin" />}
     {children}
   </button>
 );
 
 export const AuthHeading: React.FC<{ title: string; subtitle?: string }> = ({ title, subtitle }) => (
   <div className="mb-8">
-    <h1 className="text-2xl font-semibold tracking-tight text-gray-900">{title}</h1>
-    {subtitle && <p className="mt-1.5 text-gray-600">{subtitle}</p>}
+    <h1 className="text-heading-2 font-medium text-ink">{title}</h1>
+    {subtitle && <p className="mt-2 text-[15px] font-light text-ink-secondary">{subtitle}</p>}
   </div>
 );
 
-export const authLinkClass = 'font-medium text-primary-600 hover:text-primary-500';
+export const authLinkClass = 'link';
+
+/** Checkbox row used for "remember me" and terms. */
+export const CheckboxField: React.FC<{
+  checked: boolean;
+  onChange: (checked: boolean) => void;
+  children: React.ReactNode;
+}> = ({ checked, onChange, children }) => (
+  <label className="flex cursor-pointer items-start gap-2.5 text-sm text-ink-secondary">
+    <input type="checkbox" checked={checked} onChange={(e) => onChange(e.target.checked)} className="checkbox mt-0.5" />
+    <span>{children}</span>
+  </label>
+);

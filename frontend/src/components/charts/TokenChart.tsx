@@ -56,13 +56,17 @@ export const TokenChart: React.FC<{ data: TokenTrendPoint[] }> = ({ data }) => {
             const outH = scale(p.output_tokens);
             const outVisible = outH > 0;
             return (
-              <g key={p.date} data-testid={`token-column-${p.date}`} opacity={hover === null || hover === i ? 1 : 0.55}>
-                {inH > 0 && (outVisible
-                  ? <rect x={cx - barW / 2} y={base - inH} width={barW} height={inH} fill={CHART.series1} />
-                  : <path d={topRounded(cx - barW / 2, base - inH, barW, inH)} fill={CHART.series1} />)}
-                {outVisible && (
-                  <path d={topRounded(cx - barW / 2, base - inH - GAP - outH, barW, outH)} fill={CHART.series2} />
-                )}
+              <g key={p.date} data-testid={`token-column-${p.date}`} opacity={hover === null || hover === i ? 1 : 0.55}
+                 className="transition-opacity duration-200 ease-soft">
+                {/* Columns grow up from the baseline, left to right */}
+                <g className="fill-box origin-bottom animate-grow-y" style={{ animationDelay: `${i * 0.012}s` }}>
+                  {inH > 0 && (outVisible
+                    ? <rect x={cx - barW / 2} y={base - inH} width={barW} height={inH} fill={CHART.series1} className="viz-mark" />
+                    : <path d={topRounded(cx - barW / 2, base - inH, barW, inH)} fill={CHART.series1} className="viz-mark" />)}
+                  {outVisible && (
+                    <path d={topRounded(cx - barW / 2, base - inH - GAP - outH, barW, outH)} fill={CHART.series2} className="viz-mark" />
+                  )}
+                </g>
                 {labeled.has(i) && (
                   <text x={cx} y={HEIGHT - 6} fill={CHART.muted} fontSize={11}
                         textAnchor={i === data.length - 1 ? 'end' : i === 0 ? 'start' : 'middle'}>{formatDay(p.date)}</text>

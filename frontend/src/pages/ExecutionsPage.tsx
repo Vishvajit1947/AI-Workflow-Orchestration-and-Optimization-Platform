@@ -3,7 +3,7 @@
  */
 import { Fragment, useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { ChevronDown, ChevronRight, RefreshCw } from 'lucide-react';
+import { ChevronRight, RefreshCw, Zap } from 'lucide-react';
 import { executionApi } from '../api/executionApi';
 import type { ExecutionListItem } from '../types/execution';
 import { formatDuration, formatUSD } from '../lib/format';
@@ -11,6 +11,7 @@ import { getErrorMessage } from '../lib/errors';
 import { ExecutionTimelineView } from '../components/charts/TimelineChart';
 import { PageHeader } from '../components/ui/PageHeader';
 import { StatusBadge } from '../components/ui/StatusBadge';
+import { EmptyState, ErrorState, Skeleton } from '../components/ui/States';
 
 const PAGE_SIZE = 25;
 const COLUMN_COUNT = 7;
@@ -46,75 +47,89 @@ export default function ExecutionsPage() {
   return (
     <div>
       <PageHeader
+        eyebrow="Build"
         title="Executions"
         description="Every workflow run, newest first. Expand a run to see its timeline."
         actions={
-          <button onClick={load} disabled={loading} className="btn btn-secondary">
+          <button onClick={load} disabled={loading} className="btn btn-outline">
             <RefreshCw size={14} className={loading ? 'animate-spin' : ''} aria-hidden /> Refresh
           </button>
         }
       />
 
-      {error && <p role="alert" className="mb-4 text-sm text-red-400">Could not load executions: {error}</p>}
-      {loading && items.length === 0 && !error && <p className="text-sm text-surface-200/50">Loading executions…</p>}
+      {error && <ErrorState className="mb-4" title="Could not load executions" message={error} onRetry={load} />}
+      {loading && items.length === 0 && !error && (
+        <div className="space-y-3" aria-busy>
+          {Array.from({ length: 5 }, (_, i) => <Skeleton key={i} className="h-14" />)}
+        </div>
+      )}
       {!loading && items.length === 0 && !error && (
-        <p className="glass rounded-xl p-6 text-sm text-surface-200/50">
-          No executions yet. Open a workflow and choose <span className="text-white">Execute Workflow</span> to run it.
-        </p>
+        <EmptyState
+          icon={Zap}
+          title="No executions yet."
+          description={<>Open a workflow and choose <span className="font-book text-ink">Execute Workflow</span> to run it.</>}
+          action={<Link to="/workflows" className="btn btn-secondary btn-sm">Open workflows</Link>}
+        />
       )}
 
       {items.length > 0 && (
-        <div className={`glass overflow-x-auto rounded-xl transition-opacity ${loading ? 'opacity-60' : ''}`} aria-busy={loading}>
-          <table className="w-full text-sm">
-            <thead className="border-b border-surface-700/50 text-xs uppercase tracking-wide text-surface-200/50">
+        <div className={`card overflow-x-auto transition-opacity ${loading ? 'opacity-60' : ''}`} aria-busy={loading}>
+          <table className="data-table tabular">
+            <thead>
               <tr>
-                <th className="w-8 px-4 py-3"><span className="sr-only">Expand</span></th>
-                <th className="px-4 py-3 text-left">Workflow</th>
-                <th className="px-4 py-3 text-left">Status</th>
-                <th className="whitespace-nowrap px-4 py-3 text-left">Started</th>
-                <th className="px-4 py-3 text-right">Stages</th>
-                <th className="px-4 py-3 text-right">Duration</th>
-                <th className="px-4 py-3 text-right">Cost</th>
+                <th className="w-10"><span className="sr-only">Expand</span></th>
+                <th>Workflow</th>
+                <th>Status</th>
+                <th className="hidden md:table-cell">Started</th>
+                <th className="hidden !text-right sm:table-cell">Stages</th>
+                <th className="!text-right">Duration</th>
+                <th className="hidden !text-right md:table-cell">Cost</th>
               </tr>
             </thead>
-            <tbody className="tabular-nums">
-              {items.map((e) => {
+            <tbody>
+              {items.map((e, index) => {
                 const isOpen = expanded === e.execution_id;
                 return (
                   <Fragment key={e.execution_id}>
-                    <tr className="cursor-pointer border-b border-surface-700/30 hover:bg-surface-700/20" onClick={() => toggle(e.execution_id)}>
-                      <td className="px-4 py-3 text-surface-200/50">
+                    <tr
+                      className={`animate-fade-in-up cursor-pointer transition-colors duration-200 ease-soft hover:bg-lavender-soft ${isOpen ? 'bg-lavender-soft' : ''}`}
+                      style={{ animationDelay: `${Math.min(index, 12) * 0.03}s` }}
+                      onClick={() => toggle(e.execution_id)}
+                    >
+                      <td className="!pr-0">
                         <button
                           onClick={(ev) => { ev.stopPropagation(); toggle(e.execution_id); }}
                           aria-expanded={isOpen}
                           aria-label={`${isOpen ? 'Hide' : 'Show'} timeline for ${e.workflow_name}`}
-                          className="rounded p-0.5 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-400/60"
+                          className="btn btn-ghost btn-icon btn-sm"
                         >
-                          {isOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                          <ChevronRight size={15} className={`transition-transform duration-300 ease-mercury ${isOpen ? 'rotate-90' : ''}`} />
                         </button>
                       </td>
-                      <td className="px-4 py-3">
+                      <td className="min-w-[10rem]">
                         <Link
                           to={`/workflows/${e.workflow_id}`}
                           onClick={(ev) => ev.stopPropagation()}
-                          className="font-medium hover:text-primary-400"
+                          className="font-book text-ink hover:text-primary-700"
                         >
                           {e.workflow_name}
                         </Link>
-                        <div className="font-mono text-xs text-surface-200/40">{e.execution_id.slice(0, 8)}</div>
+                        <div className="mt-0.5 font-mono text-[11px] text-ink-muted">{e.execution_id.slice(0, 8)}</div>
                       </td>
-                      <td className="px-4 py-3"><StatusBadge status={e.status} /></td>
-                      <td className="whitespace-nowrap px-4 py-3 text-surface-200/70">
+                      <td><StatusBadge status={e.status} /></td>
+                      <td className="hidden whitespace-nowrap text-ink-secondary md:table-cell">
                         {e.started_at ? new Date(e.started_at).toLocaleString() : '—'}
                       </td>
-                      <td className="px-4 py-3 text-right">{e.completed_stages}/{e.total_stages}</td>
-                      <td className="px-4 py-3 text-right">{e.duration_ms != null ? formatDuration(e.duration_ms) : '—'}</td>
-                      <td className="px-4 py-3 text-right">{formatUSD(Number(e.total_cost))}</td>
+                      <td className="hidden text-right sm:table-cell">{e.completed_stages}/{e.total_stages}</td>
+                      <td className="text-right">{e.duration_ms != null ? formatDuration(e.duration_ms) : '—'}</td>
+                      <td className="hidden text-right md:table-cell">{formatUSD(Number(e.total_cost))}</td>
                     </tr>
                     {isOpen && (
-                      <tr className="border-b border-surface-700/30">
-                        <td colSpan={COLUMN_COUNT} className="px-4 py-4">
-                          <ExecutionTimelineView executionId={e.execution_id} dark />
+                      <tr className="!border-b-hairline bg-lavender-soft/50">
+                        <td colSpan={COLUMN_COUNT} className="!px-3 !pb-5 !pt-1 sm:!px-5">
+                          <div className="animate-fade-in-up">
+                            <ExecutionTimelineView executionId={e.execution_id} />
+                          </div>
                         </td>
                       </tr>
                     )}
@@ -128,11 +143,11 @@ export default function ExecutionsPage() {
 
       {(page > 0 || items.length === PAGE_SIZE) && (
         <div className="mt-4 flex items-center justify-end gap-2">
-          <span className="mr-2 text-xs text-surface-200/40">Page {page + 1}</span>
-          <button onClick={() => setPage(Math.max(0, page - 1))} disabled={page === 0 || loading} className="btn btn-secondary py-1.5">
+          <span className="mr-2 text-xs text-ink-muted">Page {page + 1}</span>
+          <button onClick={() => setPage(Math.max(0, page - 1))} disabled={page === 0 || loading} className="btn btn-outline btn-sm">
             Previous
           </button>
-          <button onClick={() => setPage(page + 1)} disabled={items.length < PAGE_SIZE || loading} className="btn btn-secondary py-1.5">
+          <button onClick={() => setPage(page + 1)} disabled={items.length < PAGE_SIZE || loading} className="btn btn-outline btn-sm">
             Next
           </button>
         </div>

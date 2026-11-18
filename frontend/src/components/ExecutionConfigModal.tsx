@@ -1,11 +1,14 @@
 /**
  * Modal for configuring execution parameters: routing, fallback provider/model,
- * per-stage model overrides and cache use.
+ * per-stage model overrides, parallelism and cache use.
  */
 import React, { useEffect, useState } from 'react';
+import { ChevronDown, Play, TriangleAlert } from 'lucide-react';
 import { modelsApi } from '../api/modelsApi';
 import { routingApi } from '../api/routingApi';
 import { ModelSelect } from './ModelSelect';
+import { Dialog } from './ui/Dialog';
+import { Collapse } from './motion/Motion';
 import type { Stage } from '../types';
 import type { ModelProfile, RoutingPreviewItem } from '../types/routing';
 
@@ -46,6 +49,31 @@ const configuredProviders = (models: ModelProfile[]): string[] => {
   return names.sort((a, b) => rank(a) - rank(b) || a.localeCompare(b));
 };
 
+/** One on/off option: label on the left, Mercury pill switch on the right. */
+const SwitchRow: React.FC<{
+  id: string;
+  label: string;
+  description: React.ReactNode;
+  checked: boolean;
+  onChange: (checked: boolean) => void;
+}> = ({ id, label, description, checked, onChange }) => (
+  <div className="flex items-start justify-between gap-4 py-3.5">
+    <div className="min-w-0">
+      <label htmlFor={id} className="cursor-pointer text-sm font-book text-ink">{label}</label>
+      <p id={`${id}-hint`} className="mt-1 text-xs leading-relaxed text-ink-muted">{description}</p>
+    </div>
+    <input
+      id={id}
+      type="checkbox"
+      role="switch"
+      className="switch mt-0.5"
+      checked={checked}
+      onChange={(e) => onChange(e.target.checked)}
+      aria-describedby={`${id}-hint`}
+    />
+  </div>
+);
+
 export const ExecutionConfigModal: React.FC<ExecutionConfigModalProps> = ({
   isOpen,
   onClose,
@@ -84,16 +112,6 @@ export const ExecutionConfigModal: React.FC<ExecutionConfigModalProps> = ({
     }
   }, [isOpen, workflowId, stages.length]);
 
-  // Escape closes the dialog
-  useEffect(() => {
-    if (!isOpen) return;
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [isOpen, onClose]);
-
-  if (!isOpen) return null;
-
   // Until the registry answers (or if it fails) offer every provider the backend supports
   const configured = configuredProviders(models);
   const providers = configured.length > 0 ? configured : PROVIDER_ORDER;
@@ -123,110 +141,115 @@ export const ExecutionConfigModal: React.FC<ExecutionConfigModalProps> = ({
     });
   };
 
+  const overrideCount = Object.keys(overrides).length;
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="execute-dialog-title"
-        className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-xl border border-surface-700 bg-surface-800 p-6 text-white shadow-xl"
-      >
-        <h2 id="execute-dialog-title" className="mb-1 text-xl font-semibold">Execute Workflow</h2>
-        <p className="mb-6 text-sm text-surface-200/60">
-          Run settings for <strong className="text-white">{workflowName}</strong>
-        </p>
+    <Dialog
+      open={isOpen}
+      onClose={onClose}
+      titleId="execute-dialog-title"
+      title="Execute Workflow"
+      description={<>Run settings for <strong className="font-medium text-ink">{workflowName}</strong></>}
+      footer={
+        <>
+          <button onClick={onClose} className="btn btn-outline">
+            Cancel
+          </button>
+          <button onClick={handleExecute} className="btn btn-primary" data-autofocus>
+            <Play size={15} aria-hidden />
+            Execute
+          </button>
+        </>
+      }
+    >
+      <div className="divide-y divide-hairline">
+        <SwitchRow
+          id="execution-routing"
+          label="Smart routing"
+          checked={useRouting}
+          onChange={setUseRouting}
+          description={useRouting
+            ? 'Each stage goes to the best model for its type under the routing rules'
+            : 'Every stage uses the default provider and model below'}
+        />
 
-        {/* Routing toggle */}
-        <div className="mb-4">
-          <label className="flex items-center gap-2 text-sm font-medium text-surface-200/80">
-            <input
-              type="checkbox"
-              checked={useRouting}
-              onChange={(e) => setUseRouting(e.target.checked)}
-              className="rounded border-surface-700 accent-primary-400"
-            />
-            Smart routing
-          </label>
-          <p className="text-xs text-surface-200/50 mt-1">
+        <div className="grid gap-4 py-4 sm:grid-cols-2">
+          <div>
+            <label htmlFor="execution-provider" className="label">
+              Default Provider
+            </label>
+            <select
+              id="execution-provider"
+              value={activeProvider}
+              onChange={(e) => {
+                setProvider(e.target.value);
+                setModel(null); // Reset model when provider changes
+              }}
+              className="input"
+            >
+              {providers.map((p) => (
+                <option key={p} value={p}>
+                  {providerLabel(p)}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label htmlFor="execution-model" className="label">
+              Default Model
+            </label>
+            <select
+              id="execution-model"
+              value={model || ''}
+              onChange={(e) => setModel(e.target.value || null)}
+              className="input"
+            >
+              <option value="">Provider default</option>
+              {providerModels.map((m) => (
+                <option key={m.model_name} value={m.model_name}>
+                  {m.display_name}
+                </option>
+              ))}
+            </select>
+          </div>
+          <p className="-mt-2 text-xs text-ink-muted sm:col-span-2">
             {useRouting
-              ? 'Each stage goes to the best model for its type under the routing rules'
-              : 'Every stage uses the default provider and model below'}
+              ? 'Used only when no registered model can be routed'
+              : 'Stages can override with their own model preference'}
           </p>
-        </div>
-
-        {/* Provider selection */}
-        <div className="mb-4">
-          <label htmlFor="execution-provider" className="block text-sm font-medium text-surface-200/80 mb-2">
-            Default Provider
-          </label>
-          <select
-            id="execution-provider"
-            value={activeProvider}
-            onChange={(e) => {
-              setProvider(e.target.value);
-              setModel(null); // Reset model when provider changes
-            }}
-            className="w-full px-3 py-2 bg-surface-900 border border-surface-700 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-400"
-          >
-            {providers.map((p) => (
-              <option key={p} value={p}>
-                {providerLabel(p)}
-              </option>
-            ))}
-          </select>
           {registryError && (
-            <p className="text-xs text-amber-300/80 mt-1">
+            <p className="flex items-start gap-2 rounded-[10px] bg-warning-soft px-3 py-2 text-xs text-warning sm:col-span-2">
+              <TriangleAlert size={13} className="mt-px shrink-0" aria-hidden />
               Couldn't load the model registry; showing all providers. Ones without an API key will fail.
             </p>
           )}
         </div>
 
-        {/* Model selection */}
-        <div className="mb-6">
-          <label htmlFor="execution-model" className="block text-sm font-medium text-surface-200/80 mb-2">
-            Default Model
-          </label>
-          <select
-            id="execution-model"
-            value={model || ''}
-            onChange={(e) => setModel(e.target.value || null)}
-            className="w-full px-3 py-2 bg-surface-900 border border-surface-700 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-400"
-          >
-            <option value="">Provider default</option>
-            {providerModels.map((m) => (
-              <option key={m.model_name} value={m.model_name}>
-                {m.display_name}
-              </option>
-            ))}
-          </select>
-          <p className="text-xs text-surface-200/50 mt-1">
-            {useRouting
-              ? 'Used only when no registered model can be routed'
-              : 'Stages can override with their own model preference'}
-          </p>
-        </div>
-
         {/* Per-stage overrides */}
         {useRouting && stages.length > 0 && (
-          <div className="mb-6">
+          <div className="py-3.5">
             <button
               type="button"
               onClick={() => setShowAdvanced(!showAdvanced)}
-              className="text-sm text-primary-400 hover:text-primary-300"
+              aria-expanded={showAdvanced}
+              className="flex w-full items-center justify-between gap-2 text-left text-sm font-book text-ink hover:text-primary-700"
             >
-              {showAdvanced ? '− Hide' : '+ Show'} per-stage models
-              {Object.keys(overrides).length > 0 && ` (${Object.keys(overrides).length} overridden)`}
+              <span>
+                {showAdvanced ? '− Hide' : '+ Show'} per-stage models
+                {overrideCount > 0 && ` (${overrideCount} overridden)`}
+              </span>
+              <ChevronDown size={15} aria-hidden className={`text-ink-muted transition-transform duration-300 ease-mercury ${showAdvanced ? 'rotate-180' : ''}`} />
             </button>
 
-            {showAdvanced && (
-              <div className="mt-3 p-4 bg-surface-900/60 border border-surface-700 rounded-md space-y-3">
+            <Collapse open={showAdvanced}>
+              <div className="mt-3 space-y-3 rounded-card bg-lavender-soft p-4">
                 {[...stages].sort((a, b) => a.stage_order - b.stage_order).map((stage) => {
                   const pick = preview[stage.id];
                   const autoLabel = pick?.model_name ? `Auto → ${pick.model_name}` : 'Auto (routing rules)';
                   return (
                     <div key={stage.id}>
-                      <label htmlFor={`override-${stage.id}`} className="block text-xs text-surface-200/60 mb-1">
-                        {stage.name} <span className="text-surface-200/40">({stage.stage_type || 'untyped'})</span>
+                      <label htmlFor={`override-${stage.id}`} className="mb-1 block text-xs text-ink-secondary">
+                        {stage.name} <span className="text-ink-muted">({stage.stage_type || 'untyped'})</span>
                       </label>
                       <ModelSelect
                         id={`override-${stage.id}`}
@@ -235,61 +258,34 @@ export const ExecutionConfigModal: React.FC<ExecutionConfigModalProps> = ({
                         value={overrides[stage.id] || null}
                         onChange={(modelName) => setOverride(stage.id, modelName)}
                         autoLabel={autoLabel}
-                        className="w-full px-2 py-1 text-sm bg-surface-900 border border-surface-700 rounded"
+                        className="input input-sm"
                       />
                       {!overrides[stage.id] && pick && (
-                        <p className="text-xs text-surface-200/40 mt-0.5">{pick.reason}</p>
+                        <p className="mt-1 text-xs text-ink-muted">{pick.reason}</p>
                       )}
                     </div>
                   );
                 })}
               </div>
-            )}
+            </Collapse>
           </div>
         )}
 
-        {/* Parallel toggle */}
-        <div className="mb-4">
-          <label className="flex items-center gap-2 text-sm font-medium text-surface-200/80">
-            <input
-              type="checkbox"
-              checked={parallel}
-              onChange={(e) => setParallel(e.target.checked)}
-              className="rounded border-surface-700 accent-primary-400"
-            />
-            Run independent stages in parallel
-          </label>
-          <p className="text-xs text-surface-200/50 mt-1">
-            Turn off to run one stage at a time, still in dependency order
-          </p>
-        </div>
-
-        {/* Cache toggle */}
-        <div className="mb-6">
-          <label className="flex items-center gap-2 text-sm font-medium text-surface-200/80">
-            <input
-              type="checkbox"
-              checked={useCache}
-              onChange={(e) => setUseCache(e.target.checked)}
-              className="rounded border-surface-700 accent-primary-400"
-            />
-            Use semantic cache
-          </label>
-          <p className="text-xs text-surface-200/50 mt-1">
-            Turn off to force fresh LLM calls; new results still refresh the cache
-          </p>
-        </div>
-
-        {/* Actions */}
-        <div className="flex justify-end gap-3 border-t border-surface-700 pt-5">
-          <button onClick={onClose} className="btn btn-secondary px-4">
-            Cancel
-          </button>
-          <button onClick={handleExecute} className="btn btn-primary px-4" autoFocus>
-            Execute
-          </button>
-        </div>
+        <SwitchRow
+          id="execution-parallel"
+          label="Run independent stages in parallel"
+          checked={parallel}
+          onChange={setParallel}
+          description="Turn off to run one stage at a time, still in dependency order"
+        />
+        <SwitchRow
+          id="execution-cache"
+          label="Use semantic cache"
+          checked={useCache}
+          onChange={setUseCache}
+          description="Turn off to force fresh LLM calls; new results still refresh the cache"
+        />
       </div>
-    </div>
+    </Dialog>
   );
 };

@@ -21,25 +21,26 @@ export const CacheMeter: React.FC<{ data: CacheMetrics }> = ({ data }) => {
       ]} />}
     >
       <div className="flex items-baseline justify-between mb-2">
-        <span className="text-3xl font-semibold" data-testid="cache-hit-rate">{formatPercent(data.hit_rate)}</span>
-        <span className="text-xs text-surface-200/60">{data.total_hits} of {lookups} stage runs</span>
+        <span className="text-stat font-medium text-ink tabular" data-testid="cache-hit-rate">{formatPercent(data.hit_rate)}</span>
+        <span className="text-xs text-ink-muted">{data.total_hits} of {lookups} stage runs</span>
       </div>
       <div className="h-2.5 rounded-full overflow-hidden" style={{ background: CHART.track }}
            role="meter" aria-label="Cache hit rate" aria-valuenow={Math.round(data.hit_rate)} aria-valuemin={0} aria-valuemax={100}>
-        <div className="h-full rounded-full" style={{ width: `${data.hit_rate}%`, background: CHART.series1 }} />
+        <div className="h-full origin-left animate-grow-x rounded-full transition-[width] duration-700 ease-mercury"
+             style={{ width: `${data.hit_rate}%`, background: CHART.series1 }} />
       </div>
-      <dl className="grid grid-cols-3 gap-3 mt-5 text-sm">
+      <dl className="mt-6 grid grid-cols-3 gap-3 border-t border-hairline pt-5 text-sm">
         <div>
-          <dt className="text-xs text-surface-200/50">Tokens saved</dt>
-          <dd className="font-semibold mt-0.5">{formatCompact(data.total_tokens_saved)}</dd>
+          <dt className="text-xs text-ink-muted">Tokens saved</dt>
+          <dd className="mt-1 font-medium text-ink tabular">{formatCompact(data.total_tokens_saved)}</dd>
         </div>
         <div>
-          <dt className="text-xs text-surface-200/50">Cost saved</dt>
-          <dd className="font-semibold mt-0.5">{formatUSD(data.total_cost_saved)}</dd>
+          <dt className="text-xs text-ink-muted">Cost saved</dt>
+          <dd className="mt-1 font-medium text-ink tabular">{formatUSD(data.total_cost_saved)}</dd>
         </div>
         <div>
-          <dt className="text-xs text-surface-200/50">Valid entries</dt>
-          <dd className="font-semibold mt-0.5">{data.valid_entries.toLocaleString()}</dd>
+          <dt className="text-xs text-ink-muted">Valid entries</dt>
+          <dd className="mt-1 font-medium text-ink tabular">{data.valid_entries.toLocaleString()}</dd>
         </div>
       </dl>
     </ChartCard>

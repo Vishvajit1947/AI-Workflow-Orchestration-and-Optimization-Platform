@@ -168,9 +168,9 @@ export const CopyButton: React.FC<{ text: string; label?: string; className?: st
       type="button"
       onClick={copy}
       aria-label={copied ? 'Copied' : label}
-      className={`inline-flex items-center gap-1 rounded px-2 py-1 text-xs font-medium text-surface-200/60 hover:text-white hover:bg-surface-700/60 transition-colors ${className}`}
+      className={`inline-flex items-center gap-1 rounded-pill px-2.5 py-1 text-xs font-book text-ink-secondary transition-colors hover:bg-ink/[0.06] hover:text-ink ${className}`}
     >
-      {copied ? <Check size={13} className="text-primary-400" /> : <Copy size={13} />}
+      {copied ? <Check size={13} className="text-success" /> : <Copy size={13} />}
       {copied ? 'Copied' : label}
     </button>
   );
@@ -185,23 +185,23 @@ export const CodeBlock: React.FC<{ node?: HastNode; children?: React.ReactNode }
   const [expanded, setExpanded] = useState(lines <= COLLAPSED_BY_DEFAULT_LINES);
 
   return (
-    <div className="md-code my-4 overflow-hidden rounded-lg border border-surface-700 bg-[#0d0d0d]">
-      <div className="flex items-center justify-between gap-2 border-b border-surface-700 bg-surface-800/80 px-3 py-1.5">
+    <div className="md-code my-4 overflow-hidden rounded-card bg-night-raised text-on-dark">
+      <div className="flex items-center justify-between gap-2 border-b border-night-line bg-night px-3 py-1.5">
         {collapsible ? (
           <button
             type="button"
             onClick={() => setExpanded((e) => !e)}
             aria-expanded={expanded}
-            className="inline-flex items-center gap-1.5 text-xs font-semibold text-surface-200/80 hover:text-white"
+            className="inline-flex items-center gap-1.5 text-xs font-book text-on-dark hover:text-white"
           >
             {expanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
             {label}
-            <span className="font-normal text-surface-200/40">· {lines} lines</span>
+            <span className="font-normal text-fog/70">· {lines} lines</span>
           </button>
         ) : (
-          <span className="text-xs font-semibold text-surface-200/70">{label}</span>
+          <span className="text-xs font-book text-fog">{label}</span>
         )}
-        <CopyButton text={code} />
+        <CopyButton text={code} className="!text-fog hover:!bg-white/10 hover:!text-on-dark" />
       </div>
       <div className="relative">
         <pre
@@ -210,11 +210,11 @@ export const CodeBlock: React.FC<{ node?: HastNode; children?: React.ReactNode }
           {children}
         </pre>
         {!expanded && (
-          <div className="absolute inset-x-0 bottom-0 flex justify-center bg-gradient-to-t from-[#0d0d0d] via-[#0d0d0d]/90 to-transparent pb-3 pt-10">
+          <div className="absolute inset-x-0 bottom-0 flex justify-center bg-gradient-to-t from-night-raised via-night-raised/90 to-transparent pb-3 pt-10">
             <button
               type="button"
               onClick={() => setExpanded(true)}
-              className="rounded-md border border-surface-700 bg-surface-800 px-3 py-1 text-xs font-medium text-surface-200/80 hover:text-white"
+              className="btn btn-glass btn-sm"
             >
               Show all {lines} lines
             </button>
@@ -228,39 +228,39 @@ export const CodeBlock: React.FC<{ node?: HastNode; children?: React.ReactNode }
 // ---------- element styling ----------
 
 const components: Components = {
-  h1: ({ node: _n, ...p }) => <h1 className="scroll-mt-16 mt-8 mb-3 text-xl font-semibold tracking-tight text-white first:mt-0" {...p} />,
+  h1: ({ node: _n, ...p }) => <h1 className="scroll-mt-16 mt-8 mb-3 text-xl font-medium tracking-[0.01em] text-ink first:mt-0" {...p} />,
   h2: ({ node: _n, ...p }) => (
-    <h2 className="scroll-mt-16 mt-8 mb-3 border-b border-surface-700 pb-2 text-lg font-semibold tracking-tight text-white first:mt-0" {...p} />
+    <h2 className="scroll-mt-16 mt-8 mb-3 border-b border-hairline pb-2 text-lg font-medium tracking-[0.01em] text-ink first:mt-0" {...p} />
   ),
-  h3: ({ node: _n, ...p }) => <h3 className="scroll-mt-16 mt-6 mb-2 text-base font-semibold text-white first:mt-0" {...p} />,
-  h4: ({ node: _n, ...p }) => <h4 className="mt-5 mb-2 text-sm font-semibold text-surface-100" {...p} />,
-  h5: ({ node: _n, ...p }) => <h5 className="mt-4 mb-1 text-sm font-semibold text-surface-200/80" {...p} />,
-  h6: ({ node: _n, ...p }) => <h6 className="mt-4 mb-1 text-xs font-semibold uppercase tracking-wide text-surface-200/60" {...p} />,
-  p: ({ node: _n, ...p }) => <p className="my-3 leading-7 text-surface-200/90" {...p} />,
-  strong: ({ node: _n, ...p }) => <strong className="font-semibold text-white" {...p} />,
-  em: ({ node: _n, ...p }) => <em className="italic text-surface-100" {...p} />,
+  h3: ({ node: _n, ...p }) => <h3 className="scroll-mt-16 mt-6 mb-2 text-base font-medium text-ink first:mt-0" {...p} />,
+  h4: ({ node: _n, ...p }) => <h4 className="mt-5 mb-2 text-sm font-medium text-ink" {...p} />,
+  h5: ({ node: _n, ...p }) => <h5 className="mt-4 mb-1 text-sm font-medium text-ink-secondary" {...p} />,
+  h6: ({ node: _n, ...p }) => <h6 className="mt-4 mb-1 text-xs font-semibold uppercase tracking-wide text-ink-muted" {...p} />,
+  p: ({ node: _n, ...p }) => <p className="my-3 leading-7 text-ink" {...p} />,
+  strong: ({ node: _n, ...p }) => <strong className="font-semibold text-ink" {...p} />,
+  em: ({ node: _n, ...p }) => <em className="italic text-ink" {...p} />,
   a: ({ node: _n, ...p }) => (
     <a
-      className="text-primary-400 underline decoration-primary-400/40 underline-offset-2 hover:decoration-primary-400 break-words"
+      className="break-words text-primary-700 underline decoration-primary/40 underline-offset-2 hover:decoration-primary"
       target="_blank"
       rel="noopener noreferrer nofollow"
       {...p}
     />
   ),
-  ul: ({ node: _n, ...p }) => <ul className="my-3 list-disc space-y-1.5 pl-6 marker:text-surface-200/40" {...p} />,
-  ol: ({ node: _n, ...p }) => <ol className="my-3 list-decimal space-y-1.5 pl-6 marker:text-surface-200/50" {...p} />,
-  li: ({ node: _n, ...p }) => <li className="leading-7 text-surface-200/90 pl-1 [&>p]:my-1 [&>ul]:my-1.5 [&>ol]:my-1.5" {...p} />,
+  ul: ({ node: _n, ...p }) => <ul className="my-3 list-disc space-y-1.5 pl-6 marker:text-ink-faint" {...p} />,
+  ol: ({ node: _n, ...p }) => <ol className="my-3 list-decimal space-y-1.5 pl-6 marker:text-ink-muted" {...p} />,
+  li: ({ node: _n, ...p }) => <li className="pl-1 leading-7 text-ink [&>p]:my-1 [&>ul]:my-1.5 [&>ol]:my-1.5" {...p} />,
   blockquote: ({ node: _n, ...p }) => (
-    <blockquote className="my-4 rounded-r-md border-l-2 border-primary-500/60 bg-surface-900/60 px-4 py-1 text-surface-200/80 [&>p]:my-2" {...p} />
+    <blockquote className="my-4 rounded-r-[10px] border-l-2 border-primary bg-lavender-soft px-4 py-1 text-ink-secondary [&>p]:my-2 [&>p]:text-ink-secondary" {...p} />
   ),
-  hr: () => <hr className="my-6 border-surface-700" />,
+  hr: () => <hr className="my-6 border-hairline" />,
   pre: ({ node, children }) => <CodeBlock node={node as HastNode}>{children}</CodeBlock>,
   code: ({ node: _n, className, children, ...p }) => {
     const isBlock = /language-|hljs/.test(className ?? '') || reactText(children).includes('\n');
     if (isBlock) return <code className={className} {...p}>{children}</code>;
     return (
       <code
-        className="rounded border border-surface-700 bg-surface-900 px-1.5 py-0.5 font-mono text-[0.85em] text-surface-100 break-words"
+        className="break-words rounded-md bg-lavender px-1.5 py-0.5 font-mono text-[0.85em] text-ink"
         {...p}
       >
         {children}
@@ -268,17 +268,17 @@ const components: Components = {
     );
   },
   table: ({ node: _n, ...p }) => (
-    <div className="my-4 overflow-x-auto rounded-lg border border-surface-700">
+    <div className="my-4 overflow-x-auto rounded-card border border-hairline">
       <table className="w-full border-collapse text-sm tabular-nums" {...p} />
     </div>
   ),
-  thead: ({ node: _n, ...p }) => <thead className="bg-surface-900" {...p} />,
-  tbody: ({ node: _n, ...p }) => <tbody className="[&>tr:nth-child(even)]:bg-white/[0.025]" {...p} />,
-  tr: ({ node: _n, ...p }) => <tr className="border-t border-surface-700/70" {...p} />,
+  thead: ({ node: _n, ...p }) => <thead className="bg-surface-tint" {...p} />,
+  tbody: ({ node: _n, ...p }) => <tbody className="[&>tr:nth-child(even)]:bg-lavender-soft/60" {...p} />,
+  tr: ({ node: _n, ...p }) => <tr className="border-t border-hairline" {...p} />,
   th: ({ node: _n, ...p }) => (
-    <th className="whitespace-nowrap px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-surface-200/60" {...p} />
+    <th className="whitespace-nowrap px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-[0.05em] text-ink-muted" {...p} />
   ),
-  td: ({ node: _n, ...p }) => <td className="px-3 py-2 align-top leading-6 text-surface-200/90 min-w-[8rem] first:min-w-0" {...p} />,
+  td: ({ node: _n, ...p }) => <td className="min-w-[8rem] px-3 py-2 align-top leading-6 text-ink first:min-w-0" {...p} />,
   img: ({ node: _n, alt, ...p }) => <img alt={alt ?? ''} loading="lazy" className="my-3 max-w-full rounded" {...p} />,
 };
 

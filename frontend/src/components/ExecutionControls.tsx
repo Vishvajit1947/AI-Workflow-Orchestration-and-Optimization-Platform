@@ -5,6 +5,7 @@ import React, { useState } from 'react';
 import { Pause, Play, Square } from 'lucide-react';
 import { executionApi } from '../api/executionApi';
 import type { LiveExecutionStatus } from '../types/execution';
+import { useConfirm } from './ui/Dialog';
 
 interface ExecutionControlsProps {
   executionId: string;
@@ -14,6 +15,7 @@ interface ExecutionControlsProps {
 export const ExecutionControls: React.FC<ExecutionControlsProps> = ({ executionId, status }) => {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [confirm, confirmDialog] = useConfirm();
 
   const run = async (action: () => Promise<unknown>) => {
     setBusy(true);
@@ -27,34 +29,36 @@ export const ExecutionControls: React.FC<ExecutionControlsProps> = ({ executionI
     }
   };
 
-  const handleCancel = () => {
-    if (confirm('Cancel this execution? Running LLM calls are stopped and remaining stages are skipped.')) {
-      run(() => executionApi.cancel(executionId));
-    }
+  const handleCancel = async () => {
+    const ok = await confirm({
+      title: 'Cancel this execution?',
+      message: 'Running LLM calls are stopped and the remaining stages are skipped. Completed stage results are kept.',
+      confirmLabel: 'Cancel execution',
+      cancelLabel: 'Keep running',
+      destructive: true,
+    });
+    if (ok) run(() => executionApi.cancel(executionId));
   };
 
   const active = status === 'running' || status === 'paused' || status === 'queued';
   if (!active) return null;
 
-  const button = 'flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm transition-colors disabled:opacity-50';
   return (
-    <div className="flex items-center gap-2">
+    <div className="flex flex-wrap items-center gap-2">
       {status === 'paused' ? (
-        <button onClick={() => run(() => executionApi.resume(executionId))} disabled={busy}
-                className={`${button} bg-primary-500/15 hover:bg-primary-500/25 text-primary-400`}>
-          <Play size={14} /> Resume
+        <button onClick={() => run(() => executionApi.resume(executionId))} disabled={busy} className="btn btn-primary btn-sm">
+          <Play size={13} aria-hidden /> Resume
         </button>
       ) : (
-        <button onClick={() => run(() => executionApi.pause(executionId))} disabled={busy}
-                className={`${button} bg-amber-500/15 hover:bg-amber-500/25 text-amber-300`}>
-          <Pause size={14} /> Pause
+        <button onClick={() => run(() => executionApi.pause(executionId))} disabled={busy} className="btn btn-outline btn-sm">
+          <Pause size={13} aria-hidden /> Pause
         </button>
       )}
-      <button onClick={handleCancel} disabled={busy}
-              className={`${button} bg-red-500/15 hover:bg-red-500/25 text-red-300`}>
-        <Square size={14} /> Cancel
+      <button onClick={handleCancel} disabled={busy} className="btn btn-danger btn-sm">
+        <Square size={12} aria-hidden /> Cancel
       </button>
-      {error && <span className="text-xs text-red-400">{error}</span>}
+      {error && <span role="alert" className="text-xs text-danger">{error}</span>}
+      {confirmDialog}
     </div>
   );
 };

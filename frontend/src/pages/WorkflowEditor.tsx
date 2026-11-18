@@ -3,10 +3,12 @@
  * Stages are managed on the workflow page.
  */
 import React, { useState, useEffect } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
-import { Save, ArrowLeft } from 'lucide-react';
+import { Link, useNavigate, useParams } from 'react-router-dom';
+import { Save, Sparkles } from 'lucide-react';
 import { workflowApi } from '../lib/workflows';
 import { getErrorMessage } from '../lib/errors';
+import { PageHeader } from '../components/ui/PageHeader';
+import { LoadingState, Notice } from '../components/ui/States';
 import type { WorkflowCreate } from '../types';
 
 export default function WorkflowEditor() {
@@ -47,31 +49,26 @@ export default function WorkflowEditor() {
   };
 
   return (
-    <div className="max-w-2xl">
-      <button onClick={() => navigate(-1)} className="btn btn-ghost -ml-3 mb-4">
-        <ArrowLeft size={16} aria-hidden /> Back
-      </button>
+    <div className="mx-auto max-w-2xl">
+      <PageHeader
+        eyebrow={isEditing ? 'Workflow' : 'Build'}
+        title={isEditing ? 'Edit workflow' : 'Create a workflow manually'}
+        description={
+          isEditing
+            ? 'Update the workflow details. Stages are edited on the workflow page.'
+            : 'Name the workflow, then add its stages on the next page.'
+        }
+      />
 
-      <h1 className="text-2xl font-semibold tracking-tight">{isEditing ? 'Edit workflow' : 'Create a workflow manually'}</h1>
-      <p className="mb-6 mt-1 text-sm text-surface-200/50">
-        {isEditing
-          ? 'Update the workflow details. Stages are edited on the workflow page.'
-          : 'Name the workflow, then add its stages on the next page.'}
-      </p>
-
-      {error && (
-        <p role="alert" className="mb-6 rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-400">
-          {error}
-        </p>
-      )}
+      {error && <Notice tone="danger" className="mb-6">{error}</Notice>}
 
       {loading ? (
-        <p className="text-sm text-surface-200/50">Loading workflow…</p>
+        <LoadingState label="Loading workflow…" />
       ) : (
-        <form onSubmit={handleSubmit} className="space-y-5">
+        <form onSubmit={handleSubmit} className="card space-y-5 p-5 sm:p-7">
           <div>
-            <label htmlFor="wf-name" className="mb-1.5 block text-sm font-medium text-surface-200/80">
-              Name <span className="text-red-400" aria-hidden>*</span>
+            <label htmlFor="wf-name" className="label">
+              Name <span className="text-danger" aria-hidden>*</span>
             </label>
             <input
               id="wf-name"
@@ -79,13 +76,13 @@ export default function WorkflowEditor() {
               required
               value={form.name}
               onChange={(e) => setForm({ ...form, name: e.target.value })}
-              className="input px-4 py-2.5"
+              className="input"
               placeholder="e.g. Software development workflow"
             />
           </div>
 
           <div>
-            <label htmlFor="wf-description" className="mb-1.5 block text-sm font-medium text-surface-200/80">
+            <label htmlFor="wf-description" className="label">
               Description
             </label>
             <textarea
@@ -93,13 +90,13 @@ export default function WorkflowEditor() {
               value={form.description}
               onChange={(e) => setForm({ ...form, description: e.target.value })}
               rows={3}
-              className="input resize-none px-4 py-2.5"
+              className="input resize-y"
               placeholder="What this workflow does"
             />
           </div>
 
           <div>
-            <label htmlFor="wf-objective" className="mb-1.5 block text-sm font-medium text-surface-200/80">
+            <label htmlFor="wf-objective" className="label">
               Objective
             </label>
             <textarea
@@ -107,16 +104,28 @@ export default function WorkflowEditor() {
               value={form.objective}
               onChange={(e) => setForm({ ...form, objective: e.target.value })}
               rows={3}
-              className="input resize-none px-4 py-2.5"
+              className="input resize-y"
               placeholder="e.g. Build an online course management system"
             />
+            <p className="hint">Shown on the workflow page as context for its stages.</p>
           </div>
 
-          <button type="submit" disabled={saving || !form.name} className="btn btn-primary px-5 py-2.5">
-            <Save size={16} aria-hidden />
-            {saving ? 'Saving…' : isEditing ? 'Save changes' : 'Create workflow'}
-          </button>
+          <div className="flex flex-col-reverse gap-2 border-t border-hairline pt-5 sm:flex-row sm:justify-end">
+            <button type="button" onClick={() => navigate(-1)} className="btn btn-outline">Cancel</button>
+            <button type="submit" disabled={saving || !form.name} className="btn btn-primary">
+              <Save size={15} aria-hidden />
+              {saving ? 'Saving…' : isEditing ? 'Save changes' : 'Create workflow'}
+            </button>
+          </div>
         </form>
+      )}
+
+      {!isEditing && (
+        <p className="mt-8 text-center text-sm text-ink-secondary">
+          <Sparkles size={14} className="mr-1 inline text-primary" aria-hidden />
+          Not sure which stages you need?{' '}
+          <Link to="/" className="link">Let the AI planner propose them</Link>
+        </p>
       )}
     </div>
   );

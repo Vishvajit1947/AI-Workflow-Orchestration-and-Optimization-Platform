@@ -1,66 +1,76 @@
 /**
- * Two-panel authentication layout: branding on the left (large screens), form on the right.
+ * Authentication layout: Mercury's night world on the left (large screens) with the product
+ * story, the light form world on the right.
  */
 import type { ReactNode } from 'react';
 import { Network } from 'lucide-react';
 
-const Logo = ({ dark }: { dark?: boolean }) => (
+const Logo = ({ onDark }: { onDark?: boolean }) => (
   <div className="flex items-center gap-3">
-    <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary-600">
-      <Network className="h-5 w-5 text-white" aria-hidden />
-    </div>
-    <span className={`text-xl font-semibold ${dark ? 'text-gray-900' : 'text-white'}`}>AI Orchestrator</span>
+    <span className="flex h-9 w-9 items-center justify-center rounded-[10px] bg-primary">
+      <Network className="h-[18px] w-[18px] text-white" aria-hidden />
+    </span>
+    <span className={`text-lg font-medium tracking-[0.01em] ${onDark ? 'text-on-dark' : 'text-ink'}`}>AI Orchestrator</span>
   </div>
 );
 
-/** Small DAG: one input fanning out to two parallel stages that merge into a result. */
+/** One input fanning out to two parallel stages that merge into a result. */
 const DagIllustration = () => (
-  <svg className="w-full max-w-md text-primary-400" viewBox="0 0 400 200" fill="none" aria-hidden>
-    <g stroke="currentColor" strokeWidth="2" opacity="0.5">
-      <line x1="80" y1="100" x2="180" y2="60" />
-      <line x1="80" y1="100" x2="180" y2="140" />
-      <line x1="180" y1="60" x2="300" y2="100" />
-      <line x1="180" y1="140" x2="300" y2="100" />
-      <line x1="300" y1="100" x2="370" y2="100" />
+  <svg className="w-full max-w-lg" viewBox="0 0 456 190" fill="none" aria-hidden>
+    <g stroke="#9cb4e8" strokeOpacity="0.45" strokeWidth="1.5">
+      <path d="M118 95 C150 95 150 52 182 52" />
+      <path d="M118 95 C150 95 150 138 182 138" />
+      <path d="M278 52 C310 52 310 95 342 95" />
+      <path d="M278 138 C310 138 310 95 342 95" />
     </g>
-    <g fill="currentColor" opacity="0.85">
-      <circle cx="80" cy="100" r="22" />
-      <circle cx="180" cy="60" r="22" />
-      <circle cx="180" cy="140" r="22" />
-      <circle cx="300" cy="100" r="22" />
-      <circle cx="370" cy="100" r="12" />
-    </g>
-    <g fill="#0f2a1e" fontSize="10" fontWeight="600" textAnchor="middle">
-      <text x="80" y="104">Input</text>
-      <text x="180" y="64">Stage</text>
-      <text x="180" y="144">Stage</text>
-      <text x="300" y="104">Merge</text>
-    </g>
+    {[
+      { x: 22, y: 75, label: 'Objective', sub: 'input' },
+      { x: 182, y: 32, label: 'Design', sub: 'gemini' },
+      { x: 182, y: 118, label: 'Generate', sub: 'groq · cached' },
+      { x: 342, y: 75, label: 'Review', sub: 'merge' },
+    ].map((n) => (
+      <g key={n.label} transform={`translate(${n.x} ${n.y})`}>
+        <rect width="96" height="40" rx="10" fill="#1e1e2a" stroke="#2d2d3c" />
+        <text x="12" y="17" fill="#ededf3" fontSize="11" fontWeight="480">{n.label}</text>
+        <text x="12" y="31" fill="#c3c3cc" fontSize="9.5">{n.sub}</text>
+      </g>
+    ))}
   </svg>
 );
 
+const POINTS = [
+  'Plan multi-stage workflows from a single objective',
+  'Route each stage to the best Gemini or Groq model',
+  'Reuse prior results through semantic caching',
+];
+
 export default function AuthLayout({ children }: { children: ReactNode }) {
   return (
-    <div className="flex min-h-screen">
-      <div className="relative hidden overflow-hidden bg-surface-900 lg:flex lg:w-[55%]">
-        <div className="absolute inset-0 bg-gradient-to-br from-primary-500/15 to-transparent" />
-        <div className="relative z-10 flex w-full flex-col justify-center px-12 xl:px-20">
-          <div className="mb-10">
-            <Logo />
+    <div className="flex min-h-[100dvh] bg-canvas">
+      <div className="relative hidden overflow-hidden bg-night lg:flex lg:w-[52%]">
+        <div className="relative z-10 flex w-full flex-col justify-between px-12 py-12 xl:px-20">
+          <Logo onDark />
+          <div>
+            <p className="eyebrow mb-5 !text-fog">AI workflow orchestration</p>
+            <h2 className="max-w-lg text-display font-medium text-on-dark">Orchestrate AI.<br />Simplify work.</h2>
+            <ul className="mt-8 space-y-3">
+              {POINTS.map((p) => (
+                <li key={p} className="flex items-center gap-3 text-[15px] font-light text-fog">
+                  <span className="h-1.5 w-1.5 rounded-full bg-periwinkle" aria-hidden />
+                  {p}
+                </li>
+              ))}
+            </ul>
+            <div className="mt-12"><DagIllustration /></div>
           </div>
-          <h2 className="mb-4 text-4xl font-semibold tracking-tight text-white">Orchestrate AI. Simplify work.</h2>
-          <p className="mb-12 max-w-lg text-lg text-surface-200/70">
-            Plan multi-stage AI workflows from a single objective, run them across Gemini and Groq models, and
-            reuse results through semantic caching.
-          </p>
-          <DagIllustration />
+          <p className="text-legal text-slate">Plans are reviewed before anything runs.</p>
         </div>
       </div>
 
-      <div className="flex w-full items-center justify-center bg-white p-6 sm:p-8 lg:w-[45%]">
-        <div className="w-full max-w-md">
+      <div className="flex w-full items-center justify-center px-5 py-10 sm:px-8 lg:w-[48%]">
+        <div className="w-full max-w-[420px]">
           <div className="mb-10 lg:hidden">
-            <Logo dark />
+            <Logo />
           </div>
           {children}
         </div>

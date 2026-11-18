@@ -1,20 +1,23 @@
 /**
- * Analytics dashboard: one filter row (date range + workflow) scoping everything
- * below it, headline stat tiles, trend charts, model/latency/cache breakdowns,
+ * Analytics dashboard: one filter row (date range + workflow) scoping the analytics below it,
+ * headline stat tiles, trend charts, recent activity, model/latency/cache breakdowns,
  * per-stage-type table and routing effectiveness.
  */
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
 import {
-  Activity, CheckCircle2, Coins, Database, Gauge, Hash, RefreshCw,
+  Activity, ArrowRight, BarChart3, CheckCircle2, Coins, Database, Gauge, GitBranch, Hash, RefreshCw, Zap,
 } from 'lucide-react';
 import { analyticsApi } from '../api/analyticsApi';
+import { executionApi } from '../api/executionApi';
 import { workflowApi } from '../lib/workflows';
 import type {
   AnalyticsFilters, CacheMetrics, CostTrendPoint, LatencyMetrics, ModelUtilization,
   RoutingEffectiveness, StageTypeMetrics, TokenTrendPoint, WorkflowMetrics,
 } from '../types/analytics';
 import type { WorkflowListItem } from '../types';
-import { formatCompact, formatDuration, formatPercent, formatUSD } from '../lib/format';
+import type { ExecutionListItem } from '../types/execution';
+import { formatCompact, formatDuration, formatPercent, formatUSD, relativeTime } from '../lib/format';
 import { MetricCard, MetricGrid } from '../components/metrics/MetricCard';
 import { CostChart } from '../components/charts/CostChart';
 import { TokenChart } from '../components/charts/TokenChart';
@@ -24,13 +27,19 @@ import { BarList } from '../components/charts/BarList';
 import { CHART, ChartCard, DataTable } from '../components/charts/chartKit';
 import { ExportButton } from '../components/analytics/ExportButton';
 import { PageHeader } from '../components/ui/PageHeader';
+import { SegmentedControl } from '../components/ui/Tabs';
+import { StatusBadge } from '../components/ui/StatusBadge';
+import { EmptyState, ErrorState, Skeleton } from '../components/ui/States';
+import { Reveal } from '../components/motion/Motion';
 import { getErrorMessage } from '../lib/errors';
 
 const RANGES = [
-  { days: 7, label: 'Last 7 days' },
-  { days: 30, label: 'Last 30 days' },
-  { days: 90, label: 'Last 90 days' },
+  { value: 7, label: 'Last 7 days' },
+  { value: 30, label: 'Last 30 days' },
+  { value: 90, label: 'Last 90 days' },
 ];
+
+const RECENT_COUNT = 6;
 
 interface DashboardData {
   overview: WorkflowMetrics;
@@ -58,6 +67,7 @@ export default function Dashboard() {
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [recent, setRecent] = useState<ExecutionListItem[] | null>(null);
 
   const filters = useMemo(() => rangeFilters(days, workflowId), [days, workflowId]);
 
@@ -91,74 +101,110 @@ export default function Dashboard() {
     workflowApi.list(0, 100)
       .then((page) => setWorkflows(page.items))
       .catch(() => { /* filter just lists fewer options */ });
+    (async () => {
+      try {
+        setRecent((await executionApi.listExecutions(undefined, RECENT_COUNT, 0)) ?? []);
+      } catch {
+        setRecent([]); // the activity card shows its empty state
+      }
+    })();
   }, []);
+
+  const recentWorkflows = useMemo(
+    () => [...workflows]
+      .sort((a, b) => (Date.parse(b.updated_at) || 0) - (Date.parse(a.updated_at) || 0))
+      .slice(0, RECENT_COUNT),
+    [workflows],
+  );
 
   const exportFilters: AnalyticsFilters = { start_date: filters.start_date, workflow_id: filters.workflow_id };
   const o = data?.overview;
 
   return (
     <div>
-      <PageHeader title="Dashboard" description="Cost, speed, reliability and cache savings of your workflow executions" />
-
-      {/* One filter row scoping everything below */}
-      <div className="flex flex-wrap items-center gap-3 mb-6" role="group" aria-label="Dashboard filters">
-        <div className="flex rounded-lg bg-surface-800/60 p-1" role="radiogroup" aria-label="Date range">
-          {RANGES.map((r) => (
-            <button key={r.days} role="radio" aria-checked={days === r.days} onClick={() => setDays(r.days)}
-                    className={`px-3 py-1.5 rounded-md text-sm transition-colors ${
-                      days === r.days ? 'bg-primary-500/20 text-white font-medium' : 'text-surface-200/60 hover:text-white'}`}>
-              {r.label}
+      <PageHeader
+        eyebrow="Insights"
+        title="Dashboard"
+        description="Cost, speed, reliability and cache savings of your workflow executions."
+        actions={
+          <>
+            <button onClick={load} disabled={loading} className="btn btn-outline">
+              <RefreshCw size={14} className={loading ? 'animate-spin' : ''} aria-hidden /> Refresh
             </button>
-          ))}
-        </div>
-        <select aria-label="Workflow" value={workflowId} onChange={(e) => setWorkflowId(e.target.value)}
-                className="input w-auto max-w-full">
+            <ExportButton filters={exportFilters} />
+          </>
+        }
+      />
+
+      {/* One filter row scoping the analytics below */}
+      <div className="mb-6 flex flex-wrap items-center gap-3" role="group" aria-label="Dashboard filters">
+        <SegmentedControl ariaLabel="Date range" options={RANGES} value={days} onChange={setDays} />
+        <select
+          aria-label="Workflow"
+          value={workflowId}
+          onChange={(e) => setWorkflowId(e.target.value)}
+          className="input w-full rounded-pill py-2 sm:w-auto sm:max-w-xs"
+        >
           <option value="">All workflows</option>
           {workflows.map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
         </select>
-        <div className="flex gap-2 ml-auto">
-          <button onClick={load} disabled={loading} className="btn btn-secondary">
-            <RefreshCw size={14} className={loading ? 'animate-spin' : ''} aria-hidden /> Refresh
-          </button>
-          <ExportButton filters={exportFilters} />
-        </div>
       </div>
 
-      {error && <p role="alert" className="mb-6 text-sm text-red-400">Could not load analytics: {error}</p>}
-      {!data && loading && <p className="text-sm text-surface-200/50">Loading analytics…</p>}
+      {error && <ErrorState className="mb-6" title="Could not load analytics" message={error} onRetry={load} />}
+      {!data && loading && (
+        <div className="space-y-6" aria-busy>
+          <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
+            {Array.from({ length: 6 }, (_, i) => <Skeleton key={i} className="h-[106px]" />)}
+          </div>
+          <div className="grid gap-6 lg:grid-cols-2">
+            <Skeleton className="h-72" />
+            <Skeleton className="h-72" />
+          </div>
+        </div>
+      )}
 
       {data && o && (
         // Refetch keeps the previous render, dimmed: no skeleton flash, no layout jump
         <div className={`space-y-6 transition-opacity ${loading ? 'opacity-60' : ''}`} aria-busy={loading}>
           {o.total_executions === 0 && (
-            <div className="glass rounded-xl p-6 text-sm text-surface-200/60" data-testid="dashboard-empty">
-              No executions in this range{workflowId ? ' for this workflow' : ''}. Run a workflow to see its cost, speed and cache savings here.
-            </div>
+            <EmptyState
+              compact
+              icon={BarChart3}
+              data-testid="dashboard-empty"
+              title={`No executions in this range${workflowId ? ' for this workflow' : ''}`}
+              description="Run a workflow to see its cost, speed and cache savings here."
+              action={<Link to="/workflows" className="btn btn-secondary btn-sm">Open workflows</Link>}
+            />
           )}
 
           <MetricGrid>
             <MetricCard testId="kpi-executions" icon={Activity} label="Executions" value={formatCompact(o.total_executions)}
               detail={`${o.total_stages.toLocaleString()} stage runs`} />
-            <MetricCard testId="kpi-success" icon={CheckCircle2} label="Execution success"
+            <MetricCard testId="kpi-success" icon={CheckCircle2} label="Success rate"
               value={o.total_executions ? formatPercent(o.execution_success_rate) : '—'}
-              detail={`${o.failed_stages} failed · ${o.cancelled_stages} cancelled stages`} />
+              detail={`${o.failed_stages} failed · ${o.cancelled_stages} cancelled`} />
             <MetricCard testId="kpi-cost" icon={Coins} label="LLM cost" value={formatUSD(o.total_cost)}
               detail={o.llm_calls ? `${formatUSD(o.total_cost / o.llm_calls)} per call` : 'no LLM calls'} />
             <MetricCard testId="kpi-tokens" icon={Hash} label="Tokens" value={formatCompact(o.total_tokens)}
               detail={`${o.llm_calls.toLocaleString()} LLM calls`} />
-            <MetricCard testId="kpi-latency" icon={Gauge} label="Avg LLM latency"
+            <MetricCard testId="kpi-latency" icon={Gauge} label="LLM latency"
               value={o.llm_calls ? formatDuration(o.avg_latency_ms) : '—'}
               detail={o.total_executions ? `${formatDuration(o.avg_execution_duration_ms)} per execution` : undefined} />
             <MetricCard testId="kpi-cache" icon={Database} label="Cache hit rate" value={formatPercent(data.cache.hit_rate)}
               detail={`${formatUSD(data.cache.total_cost_saved)} saved`} />
           </MetricGrid>
 
-          <div className="grid lg:grid-cols-2 gap-6">
+          <div className="grid gap-6 lg:grid-cols-2">
             <CostChart data={data.costs} />
             <TokenChart data={data.tokens} />
           </div>
 
-          <div className="grid lg:grid-cols-2 gap-6">
+          <Reveal className="grid gap-6 lg:grid-cols-2">
+            <RecentExecutions items={recent} />
+            <RecentWorkflows items={recentWorkflows} />
+          </Reveal>
+
+          <div className="grid gap-6 lg:grid-cols-2">
             <ChartCard
               title="Model usage"
               subtitle="LLM calls per model (cache hits excluded)"
@@ -186,7 +232,7 @@ export default function Dashboard() {
             <LatencyChart data={data.latency} />
           </div>
 
-          <div className="grid lg:grid-cols-2 gap-6">
+          <div className="grid gap-6 lg:grid-cols-2">
             <CacheMeter data={data.cache} />
             <RoutingCard routing={data.routing} />
           </div>
@@ -205,6 +251,91 @@ export default function Dashboard() {
   );
 }
 
+function ActivityHeader({ title, subtitle, to }: { title: string; subtitle: string; to: string }) {
+  return (
+    <div className="mb-3 flex items-start justify-between gap-3">
+      <div>
+        <h3 className="text-[15px] font-medium text-ink">{title}</h3>
+        <p className="mt-1 text-xs text-ink-muted">{subtitle}</p>
+      </div>
+      <Link to={to} className="btn btn-ghost btn-sm -mr-2 -mt-1">
+        View all <ArrowRight size={13} aria-hidden />
+      </Link>
+    </div>
+  );
+}
+
+const ROW_LINK = 'flex items-center gap-3 rounded-[10px] px-2 py-2.5 transition-colors hover:bg-lavender-soft focus-visible:ring-2 focus-visible:ring-primary/40';
+
+/** Latest runs across all workflows (not scoped by the filters above). */
+function RecentExecutions({ items }: { items: ExecutionListItem[] | null }) {
+  return (
+    <section className="card min-w-0 p-5 sm:p-6" aria-label="Recent executions">
+      <ActivityHeader title="Recent executions" subtitle="Latest runs across all workflows" to="/executions" />
+      {items === null ? (
+        <div className="space-y-2">{Array.from({ length: 4 }, (_, i) => <Skeleton key={i} className="h-11" />)}</div>
+      ) : items.length === 0 ? (
+        <EmptyState compact icon={Zap} title="No executions yet" description="Run a workflow to see it here." />
+      ) : (
+        <ul className="-mx-2">
+          {items.map((e) => (
+            <li key={e.execution_id}>
+              <Link to={`/executions?expand=${e.execution_id}`} className={ROW_LINK}>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-book text-ink">{e.workflow_name}</p>
+                  <p className="mt-0.5 truncate text-xs text-ink-muted tabular">
+                    {relativeTime(e.started_at)} · {e.completed_stages}/{e.total_stages} stages
+                    {e.duration_ms != null && ` · ${formatDuration(e.duration_ms)}`}
+                  </p>
+                </div>
+                <span className="hidden text-xs text-ink-muted tabular sm:inline">{formatUSD(Number(e.total_cost))}</span>
+                <StatusBadge status={e.status} />
+              </Link>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
+  );
+}
+
+function RecentWorkflows({ items }: { items: WorkflowListItem[] }) {
+  return (
+    <section className="card min-w-0 p-5 sm:p-6" aria-label="Recent workflows">
+      <ActivityHeader title="Recent workflows" subtitle="Most recently updated" to="/workflows" />
+      {items.length === 0 ? (
+        <EmptyState
+          compact
+          icon={GitBranch}
+          title="No workflows yet"
+          description="Plan one from an objective."
+          action={<Link to="/" className="btn btn-secondary btn-sm">New workflow</Link>}
+        />
+      ) : (
+        <ul className="-mx-2">
+          {items.map((w) => (
+            <li key={w.id}>
+              <Link to={`/workflows/${w.id}`} className={ROW_LINK}>
+                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[10px] bg-lavender text-primary" aria-hidden>
+                  <GitBranch size={15} strokeWidth={1.75} />
+                </span>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-book text-ink">{w.name}</p>
+                  <p className="mt-0.5 truncate text-xs text-ink-muted tabular">
+                    {w.stage_count ?? 0} {w.stage_count === 1 ? 'stage' : 'stages'}
+                    {w.updated_at && ` · updated ${relativeTime(w.updated_at)}`}
+                  </p>
+                </div>
+                {w.status && <StatusBadge status={w.status} />}
+              </Link>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
+  );
+}
+
 function RoutingCard({ routing }: { routing: RoutingEffectiveness }) {
   const priorities = Object.entries(routing.priority_distribution);
   return (
@@ -216,23 +347,27 @@ function RoutingCard({ routing }: { routing: RoutingEffectiveness }) {
       table={<DataTable headers={['Model', 'Times selected']} align={['left']}
         rows={routing.top_models.map((m) => [m.model, m.decisions])} />}
     >
-      <dl className="grid grid-cols-2 gap-3 mb-4 text-sm">
-        <div>
-          <dt className="text-xs text-surface-200/50">User overrides</dt>
-          <dd className="font-semibold mt-0.5">{formatPercent(routing.override_rate)} <span className="text-xs font-normal text-surface-200/50">({routing.override_count})</span></dd>
+      <dl className="mb-5 grid grid-cols-2 gap-3 text-sm">
+        <div className="card-soft px-4 py-3">
+          <dt className="text-xs text-ink-muted">User overrides</dt>
+          <dd className="mt-1 text-lg font-medium text-ink tabular">
+            {formatPercent(routing.override_rate)} <span className="text-xs font-normal text-ink-muted">({routing.override_count})</span>
+          </dd>
         </div>
-        <div>
-          <dt className="text-xs text-surface-200/50">Fallbacks</dt>
-          <dd className="font-semibold mt-0.5">{formatPercent(routing.fallback_rate)} <span className="text-xs font-normal text-surface-200/50">({routing.fallback_count})</span></dd>
+        <div className="card-soft px-4 py-3">
+          <dt className="text-xs text-ink-muted">Fallbacks</dt>
+          <dd className="mt-1 text-lg font-medium text-ink tabular">
+            {formatPercent(routing.fallback_rate)} <span className="text-xs font-normal text-ink-muted">({routing.fallback_count})</span>
+          </dd>
         </div>
       </dl>
-      <p className="text-xs text-surface-200/50 mb-1">Most selected models</p>
+      <p className="eyebrow mb-2">Most selected models</p>
       <BarList ariaLabel="Routing decisions per selected model" data={routing.top_models.map((m) => ({
         key: m.model, label: m.model, value: m.decisions, display: String(m.decisions),
         tooltip: [{ label: 'selections', value: String(m.decisions), color: CHART.series1 }],
       }))} />
       {priorities.length > 0 && (
-        <p className="text-xs text-surface-200/50 mt-3">
+        <p className="mt-3 text-xs text-ink-muted">
           Priority used: {priorities.map(([p, n]) => `${p} ${n}`).join(' · ')}
         </p>
       )}

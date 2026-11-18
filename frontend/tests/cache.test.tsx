@@ -71,7 +71,6 @@ describe('CacheDashboard', () => {
     vi.clearAllMocks();
     api.getStats.mockResolvedValue(mockStats);
     api.listEntries.mockResolvedValue(mockEntries);
-    window.confirm = vi.fn(() => true);
   });
 
   afterEach(() => {
@@ -114,7 +113,9 @@ describe('CacheDashboard', () => {
   it('shows an error when the API fails', async () => {
     api.getStats.mockRejectedValue(new Error('Network Error'));
     render(<CacheDashboard />);
-    expect(await screen.findByText('Could not load the cache: Network Error')).toBeInTheDocument();
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent('Could not load the cache');
+    expect(alert).toHaveTextContent('Network Error');
   });
 
   it('expands a row to show full input and cached output', async () => {
@@ -167,6 +168,7 @@ describe('CacheDashboard', () => {
     render(<CacheDashboard />);
 
     fireEvent.click(await screen.findByText('Clear All Cache'));
+    fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Clear cache' }));
 
     expect(await screen.findByText('Invalidated 10 cache entries')).toBeInTheDocument();
     expect(api.clearCache).toHaveBeenCalledTimes(1);
@@ -174,10 +176,11 @@ describe('CacheDashboard', () => {
   });
 
   it('does not clear the cache when confirmation is cancelled', async () => {
-    window.confirm = vi.fn(() => false);
     render(<CacheDashboard />);
 
     fireEvent.click(await screen.findByText('Clear All Cache'));
+    fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Cancel' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument()); // after its exit animation
     expect(api.clearCache).not.toHaveBeenCalled();
   });
 
@@ -195,6 +198,7 @@ describe('CacheDashboard', () => {
 
     const row = (await screen.findByText('Test input 1')).closest('tr')!;
     fireEvent.click(within(row).getByTitle('Delete entry'));
+    fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Delete entry' }));
 
     await waitFor(() => expect(api.deleteEntry).toHaveBeenCalledWith('entry-1'));
     expect(await screen.findByText('Cache entry deleted')).toBeInTheDocument();
@@ -205,6 +209,7 @@ describe('CacheDashboard', () => {
     render(<CacheDashboard />);
 
     fireEvent.click(await screen.findByText('Clear All Cache'));
+    fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Clear cache' }));
     expect(await screen.findByText('Failed: DB unavailable')).toBeInTheDocument();
   });
 

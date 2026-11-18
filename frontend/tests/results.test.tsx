@@ -3,7 +3,7 @@
  * and safe Markdown rendering of LLM output.
  */
 import { describe, it, expect } from 'vitest';
-import { render, screen, within, fireEvent } from '@testing-library/react';
+import { render, screen, within, fireEvent, waitFor } from '@testing-library/react';
 import { StageResult } from '../src/components/results/StageResult';
 import { MarkdownRenderer, buildOutline } from '../src/components/results/MarkdownRenderer';
 import { formatModelName, formatProvider, parseRoutingReason } from '../src/lib/resultFormat';
@@ -78,10 +78,11 @@ describe('StageResult', () => {
     expect(screen.queryByTestId('cache-status')).not.toBeInTheDocument();
   });
 
-  it('collapses and expands a stage', () => {
+  it('collapses and expands a stage', async () => {
     render(<StageResult stage={stage({ result: 'Visible output' })} />);
     fireEvent.click(screen.getByRole('button', { name: 'Collapse Data Cleaning' }));
-    expect(screen.queryByText('Visible output')).not.toBeInTheDocument();
+    // The body animates closed, then unmounts
+    await waitFor(() => expect(screen.queryByText('Visible output')).not.toBeInTheDocument());
     fireEvent.click(screen.getByRole('button', { name: 'Expand Data Cleaning' }));
     expect(screen.getByText('Visible output')).toBeInTheDocument();
   });

@@ -53,8 +53,9 @@ export const LatencyChart: React.FC<{ data: LatencyMetrics }> = ({ data }) => {
               <g key={p.key} data-testid={`latency-${p.key}`} onPointerEnter={() => setHover(i)} onPointerLeave={() => setHover(null)}>
                 <rect x={M.left + band * i} y={M.top} width={band} height={plotH} fill="transparent" />
                 {h > 0 && <path d={topRounded(cx - barW / 2, base - h, barW, h)} fill={CHART.series1}
+                                className="viz-mark fill-box origin-bottom animate-grow-y" style={{ animationDelay: `${i * 0.06}s` }}
                                 opacity={hover === null || hover === i ? 1 : 0.55} />}
-                <text x={cx} y={base - h - 6} textAnchor="middle" fill="#e2e8f0" fontSize={11}>{formatDuration(p.value)}</text>
+                <text x={cx} y={base - h - 6} textAnchor="middle" fill={CHART.text} fontSize={11}>{formatDuration(p.value)}</text>
                 <text x={cx} y={HEIGHT - 6} textAnchor="middle" fill={CHART.muted} fontSize={11}>{p.label}</text>
               </g>
             );

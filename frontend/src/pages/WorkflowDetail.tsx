@@ -1,6 +1,6 @@
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { Edit, Trash2, ArrowLeft, Play } from 'lucide-react';
+import { Edit, Trash2, Play, Loader2, Layers, Target, GitBranch } from 'lucide-react';
 import { useWorkflow } from '../hooks/useWorkflows';
 import { workflowApi } from '../lib/workflows';
 import { stageApi } from '../lib/stages';
@@ -11,6 +11,10 @@ import { ExecutionResults } from '../components/ExecutionResults';
 import { ExecutionMonitor } from '../components/ExecutionMonitor';
 import { DAGLegend, DAGVisualization } from '../components/DAGVisualization';
 import { ProjectPanel } from '../components/project/ProjectPanel';
+import { PageHeader } from '../components/ui/PageHeader';
+import { StatusBadge } from '../components/ui/StatusBadge';
+import { EmptyState, ErrorState, LoadingState, Notice } from '../components/ui/States';
+import { useConfirm } from '../components/ui/Dialog';
 import type { Stage } from '../types';
 import type { ExecutionDetailResponse, WorkflowDAG } from '../types/execution';
 import { getErrorMessage } from '../lib/errors';
@@ -27,7 +31,9 @@ export default function WorkflowDetail() {
   const [liveExecutionId, setLiveExecutionId] = useState<string | null>(null);
   const [dag, setDag] = useState<WorkflowDAG | null>(null);
   const [dagError, setDagError] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
   const finishedExecutionId = useRef<string | null>(null);
+  const [confirm, confirmDialog] = useConfirm();
 
   const fetchStages = async () => {
     if (!id) return;
@@ -73,12 +79,19 @@ export default function WorkflowDetail() {
   };
 
   const handleDelete = async () => {
-    if (!id || !confirm('Delete this workflow?')) return;
+    if (!id || !workflow) return;
+    const ok = await confirm({
+      title: 'Delete workflow?',
+      message: <>“{workflow.name}” and its stages will be deleted. This cannot be undone.</>,
+      confirmLabel: 'Delete workflow',
+      destructive: true,
+    });
+    if (!ok) return;
     try {
       await workflowApi.delete(id);
       navigate('/workflows');
     } catch (err: unknown) {
-      alert(`Could not delete the workflow: ${getErrorMessage(err)}`);
+      setActionError(`Could not delete the workflow: ${getErrorMessage(err)}`);
     }
   };
 
@@ -90,12 +103,13 @@ export default function WorkflowDetail() {
   const handleExecute = async (config: ExecutionConfig) => {
     if (!id) return;
     setIsExecuting(true);
+    setActionError(null);
     try {
       // Run in the background and follow it live
       const response = await executionApi.startExecution(id, { ...config, background: true });
       setLiveExecutionId(response.execution_id);
     } catch (err: unknown) {
-      alert(`Execution failed: ${getErrorMessage(err)}`);
+      setActionError(`Execution failed: ${getErrorMessage(err)}`);
       setIsExecuting(false);
     }
   };
@@ -117,94 +131,120 @@ export default function WorkflowDetail() {
   }, [liveExecutionId]);
 
   // Only block the page on the first load; background refetches keep the current view mounted
-  if (loading && !workflow) return <p className="text-sm text-surface-200/50">Loading workflow…</p>;
-  if (error) return <p role="alert" className="text-sm text-red-400">Could not load the workflow: {error}</p>;
-  if (!id) return <p className="text-sm text-red-400">Invalid workflow ID</p>;
-  if (!workflow) return <p className="text-sm text-surface-200/50">Workflow not found.</p>;
+  if (loading && !workflow) return <LoadingState label="Loading workflow…" />;
+  if (error) return <ErrorState title="Could not load the workflow" message={error} onRetry={refetch} />;
+  if (!id) return <ErrorState message="Invalid workflow ID" />;
+  if (!workflow) {
+    return (
+      <EmptyState icon={GitBranch} title="Workflow not found."
+        action={<Link to="/workflows" className="btn btn-secondary btn-sm">Back to workflows</Link>} />
+    );
+  }
+
+  const canExecute = !isExecuting && stages.length > 0 && !dagError;
 
   return (
     <div>
-      <Link to="/workflows" className="btn btn-ghost -ml-3 mb-4">
-        <ArrowLeft size={16} aria-hidden /> Workflows
-      </Link>
+      <PageHeader
+        eyebrow="Workflow"
+        title={workflow.name}
+        description={workflow.description || undefined}
+        meta={
+          <>
+            {workflow.status && <StatusBadge status={workflow.status} />}
+            <span className="chip"><Layers size={12} aria-hidden /> {stages.length} {stages.length === 1 ? 'stage' : 'stages'}</span>
+            {stages.some((s) => s.config?.kind === 'project_build') && <span className="chip">Complete project</span>}
+          </>
+        }
+        actions={
+          <>
+            <button onClick={handleDelete} className="btn btn-ghost hover:!bg-danger/10 hover:!text-danger" aria-label="Delete">
+              <Trash2 size={15} aria-hidden /> <span className="hidden sm:inline">Delete</span>
+            </button>
+            <Link to={`/workflows/${id}/edit`} className="btn btn-outline">
+              <Edit size={14} aria-hidden /> Edit details
+            </Link>
+            <button
+              onClick={() => setShowExecuteModal(true)}
+              disabled={!canExecute}
+              className="btn btn-primary"
+              title={stages.length === 0 ? 'Add a stage first' : dagError ? 'Fix the execution plan first' : undefined}
+            >
+              {isExecuting ? <Loader2 size={15} className="animate-spin" aria-hidden /> : <Play size={15} aria-hidden />}
+              {isExecuting ? 'Executing...' : 'Execute Workflow'}
+            </button>
+          </>
+        }
+      />
 
-      <div className="mb-8 flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-        <div className="min-w-0">
-          <h1 className="break-words text-2xl font-semibold tracking-tight">{workflow.name}</h1>
-          {workflow.description && <p className="mt-1.5 text-surface-200/60">{workflow.description}</p>}
-          {workflow.objective && (
-            <p className="mt-1.5 text-sm text-surface-200/50">
-              <span className="text-surface-200/70">Objective:</span> {workflow.objective}
-            </p>
-          )}
+      {workflow.objective && (
+        <div className="card-soft mb-6 flex items-start gap-3 px-4 py-3.5 text-sm sm:px-5">
+          <Target size={16} className="mt-0.5 shrink-0 text-primary" aria-hidden />
+          <p className="min-w-0 leading-relaxed text-ink-secondary">
+            <span className="font-book text-ink">Objective</span>
+            <span className="mx-2 text-ink-faint" aria-hidden>·</span>
+            {workflow.objective}
+          </p>
         </div>
-        <div className="flex shrink-0 flex-wrap gap-2">
-          <button
-            onClick={() => setShowExecuteModal(true)}
-            disabled={isExecuting || stages.length === 0 || Boolean(dagError)}
-            className="btn btn-primary"
-          >
-            <Play size={16} aria-hidden />
-            {isExecuting ? 'Executing...' : 'Execute Workflow'}
-          </button>
-          <Link to={`/workflows/${id}/edit`} className="btn btn-secondary">
-            <Edit size={14} aria-hidden /> Edit details
-          </Link>
-          <button onClick={handleDelete} className="btn btn-danger">
-            <Trash2 size={14} aria-hidden /> Delete
-          </button>
-        </div>
-      </div>
+      )}
 
-      {/* Stages */}
-      <div className="mb-8">
+      {actionError && <Notice tone="danger" className="mb-6" onDismiss={() => setActionError(null)}>{actionError}</Notice>}
+
+      <div className="space-y-6">
+        {/* Live monitor comes first while a run is in progress */}
+        {liveExecutionId && (
+          <div key={liveExecutionId} className="animate-fade-in-up">
+            <ExecutionMonitor executionId={liveExecutionId} onFinished={handleExecutionFinished} />
+          </div>
+        )}
+
+        {/* Stages */}
         {stagesLoading && stages.length === 0 ? (
-          <p className="text-sm text-surface-200/50">Loading stages…</p>
+          <LoadingState label="Loading stages…" />
         ) : (
           <StageEditor workflowId={id!} stages={stages} onUpdate={handleStageUpdate} />
         )}
-      </div>
 
-      {/* Execution plan (idle) or live monitor */}
-      {liveExecutionId ? (
-        <div className="mb-8">
-          <ExecutionMonitor executionId={liveExecutionId} onFinished={handleExecutionFinished} />
-        </div>
-      ) : (dag || dagError) && (
-        <div className="glass rounded-xl p-6 mb-8">
-          <div className="flex flex-wrap items-baseline justify-between gap-2 mb-4">
-            <h2 className="text-lg font-semibold">Execution Plan</h2>
-            {dag && (
-              <p className="text-xs text-surface-200/50">
-                {dag.levels.length} level{dag.levels.length === 1 ? '' : 's'} · up to {dag.max_width} in parallel ·
-                parallelism {dag.parallelism_factor.toFixed(2)}x · critical path {dag.critical_path.length} stage{dag.critical_path.length === 1 ? '' : 's'}
-              </p>
-            )}
-          </div>
-          {dagError ? (
-            <p className="text-sm text-red-400">{dagError}</p>
-          ) : dag && (
-            <div className="space-y-2">
-              <DAGVisualization dag={dag} />
-              <DAGLegend live={false} />
+        {/* Execution plan (when idle) */}
+        {!liveExecutionId && (dag || dagError) && (
+          <section className="card min-w-0 p-5 sm:p-6" aria-label="Execution plan">
+            <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <h2 className="text-[17px] font-medium text-ink">Execution Plan</h2>
+                <p className="mt-1 text-[13px] text-ink-muted">The dependency graph the engine will run. Columns run left to right.</p>
+              </div>
+              {dag && (
+                <dl className="flex flex-wrap gap-2 text-xs">
+                  <PlanFact label="Levels" value={dag.levels.length} />
+                  <PlanFact label="Max parallel" value={dag.max_width} />
+                  <PlanFact label="Parallelism" value={`${dag.parallelism_factor.toFixed(2)}x`} />
+                  <PlanFact label="Critical path" value={`${dag.critical_path.length} stage${dag.critical_path.length === 1 ? '' : 's'}`} />
+                </dl>
+              )}
             </div>
-          )}
-        </div>
-      )}
+            {dagError ? (
+              <Notice tone="danger" title="The workflow can't run as configured">{dagError}</Notice>
+            ) : dag && (
+              <div className="space-y-3">
+                <DAGVisualization dag={dag} />
+                <DAGLegend live={false} />
+              </div>
+            )}
+          </section>
+        )}
 
-      {/* Complete Project workflows: build status, logs, repairs, files, ZIP */}
-      {stages.some((s) => s.config?.kind === 'project_build') && (
-        <div className="mb-8">
+        {/* Complete Project workflows: build status, logs, repairs, files, ZIP */}
+        {stages.some((s) => s.config?.kind === 'project_build') && (
           <ProjectPanel workflowId={id} active={isExecuting} />
-        </div>
-      )}
+        )}
 
-      {/* Execution Results */}
-      {execution && (
-        <div className="mb-8">
-          <ExecutionResults execution={execution} />
-        </div>
-      )}
+        {/* Execution Results */}
+        {execution && (
+          <div key={execution.summary.execution_id} className="animate-fade-in-up">
+            <ExecutionResults execution={execution} />
+          </div>
+        )}
+      </div>
 
       {/* Execution Config Modal */}
       <ExecutionConfigModal
@@ -215,6 +255,16 @@ export default function WorkflowDetail() {
         workflowId={id}
         stages={stages}
       />
+      {confirmDialog}
+    </div>
+  );
+}
+
+function PlanFact({ label, value }: { label: string; value: string | number }) {
+  return (
+    <div className="rounded-pill bg-lavender-soft px-3 py-1.5">
+      <dt className="inline text-ink-muted">{label} </dt>
+      <dd className="inline font-book text-ink tabular">{value}</dd>
     </div>
   );
 }

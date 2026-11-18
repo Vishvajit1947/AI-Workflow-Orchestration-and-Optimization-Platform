@@ -8,15 +8,15 @@ import { analyticsApi } from '../../api/analyticsApi';
 import type { ExecutionTimeline, TimelineStage } from '../../types/analytics';
 import { formatDuration, formatUSD, niceTicks } from '../../lib/format';
 import { CHART, ChartTooltip, DataTable, statusStyle, useWidth } from './chartKit';
+import { LoadingState } from '../ui/States';
 
 const ROW = 28;
 const BAR = 14;
 const LABEL_W = 170;
 const AXIS_H = 22;
 
-/** `dark` for dark pages; default styling suits the light execution-results card. */
-export const TimelineChart: React.FC<{ timeline: ExecutionTimeline; dark?: boolean }> = ({ timeline, dark = false }) => {
-  const strong = dark ? 'text-white' : 'text-gray-900';
+export const TimelineChart: React.FC<{ timeline: ExecutionTimeline }> = ({ timeline }) => {
+  const strong = 'font-medium text-ink';
   const [ref, width] = useWidth<HTMLDivElement>();
   const [hover, setHover] = useState<number | null>(null);
   const [showTable, setShowTable] = useState(false);
@@ -31,7 +31,7 @@ export const TimelineChart: React.FC<{ timeline: ExecutionTimeline; dark?: boole
   const hovered: TimelineStage | null = hover !== null ? stages[hover] : null;
   return (
     <div>
-      <div className={`flex flex-wrap items-center justify-between gap-2 mb-3 text-sm ${dark ? 'text-surface-200/60' : 'text-gray-600'}`}>
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2 text-sm text-ink-secondary">
         <span>
           Wall-clock <strong className={strong}>{formatDuration(timeline.total_duration_ms)}</strong>
           {' · '}
@@ -39,7 +39,7 @@ export const TimelineChart: React.FC<{ timeline: ExecutionTimeline; dark?: boole
             ? <>stages overlapped: <strong className={strong}>{timeline.parallelism.toFixed(2)}x</strong> work per unit of time</>
             : 'stages ran one after another'}
         </span>
-        <button onClick={() => setShowTable(!showTable)} className={`text-xs ${dark ? 'text-primary-400 hover:text-primary-300' : 'text-blue-600 hover:text-blue-700'}`}>
+        <button onClick={() => setShowTable(!showTable)} className="btn btn-ghost btn-sm -mr-2">
           {showTable ? 'Show chart' : 'Show table'}
         </button>
       </div>
@@ -52,8 +52,8 @@ export const TimelineChart: React.FC<{ timeline: ExecutionTimeline; dark?: boole
             formatDuration(s.duration_ms ?? 0), formatUSD(s.estimated_cost),
           ])} />
       ) : (
-        <div ref={ref} className={`relative rounded-lg p-3 ${dark ? 'bg-surface-900/60' : 'bg-slate-900'}`}>
-          <div className="flex flex-wrap gap-4 mb-2 text-xs text-slate-300">
+        <div ref={ref} className="relative overflow-hidden rounded-card border border-hairline bg-surface p-3">
+          <div className="mb-2 flex flex-wrap gap-4 text-xs text-ink-secondary">
             {statuses.map((st) => {
               const style = st === 'cache' ? { color: CHART.series1, icon: '⚡', label: 'Cache hit' } : statusStyle(st);
               return (
@@ -80,11 +80,12 @@ export const TimelineChart: React.FC<{ timeline: ExecutionTimeline; dark?: boole
               return (
                 <g key={`${s.stage_id}-${i}`} data-testid={`gantt-row-${i}`} data-status={s.status}
                    onPointerEnter={() => setHover(i)} onPointerLeave={() => setHover(null)}>
-                  <rect x={0} y={i * ROW} width={width} height={ROW} fill={hover === i ? 'rgba(148,163,184,0.08)' : 'transparent'} />
-                  <text x={8} y={y + BAR / 2} dy="0.32em" fill="#e2e8f0" fontSize={12}>
+                  <rect x={0} y={i * ROW} width={width} height={ROW} fill={hover === i ? 'rgba(82,102,235,0.05)' : 'transparent'} />
+                  <text x={8} y={y + BAR / 2} dy="0.32em" fill={CHART.text} fontSize={12}>
                     {style.icon} {s.stage_name.length > 20 ? `${s.stage_name.slice(0, 19)}…` : s.stage_name}
                   </text>
-                  <rect x={x(start)} y={y} width={w} height={BAR} rx={4} fill={style.color} />
+                  <rect x={x(start)} y={y} width={w} height={BAR} rx={4} fill={style.color}
+                        className="fill-box origin-left animate-grow-x" style={{ animationDelay: `${i * 0.05}s` }} />
                 </g>
               );
             })}
@@ -105,7 +106,7 @@ export const TimelineChart: React.FC<{ timeline: ExecutionTimeline; dark?: boole
 };
 
 /** Loads and renders the timeline for an execution id. */
-export const ExecutionTimelineView: React.FC<{ executionId: string; dark?: boolean }> = ({ executionId, dark }) => {
+export const ExecutionTimelineView: React.FC<{ executionId: string }> = ({ executionId }) => {
   const [timeline, setTimeline] = useState<ExecutionTimeline | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -116,7 +117,7 @@ export const ExecutionTimelineView: React.FC<{ executionId: string; dark?: boole
       .catch((err) => setError(err.response?.data?.detail || err.message));
   }, [executionId]);
 
-  if (error) return <p className="text-sm text-red-600">Could not load timeline: {error}</p>;
-  if (!timeline) return <p className="text-sm text-gray-500">Loading timeline…</p>;
-  return <TimelineChart timeline={timeline} dark={dark} />;
+  if (error) return <p role="alert" className="text-sm text-danger">Could not load timeline: {error}</p>;
+  if (!timeline) return <LoadingState inline label="Loading timeline…" />;
+  return <TimelineChart timeline={timeline} />;
 };

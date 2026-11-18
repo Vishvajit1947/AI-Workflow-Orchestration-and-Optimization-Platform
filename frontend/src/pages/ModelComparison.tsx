@@ -3,7 +3,7 @@
  * editor, and the recent routing decision log.
  */
 import React, { useCallback, useEffect, useState } from 'react';
-import { Coins, Zap, Trophy, RefreshCw, Save, Trash2, Plus, XCircle } from 'lucide-react';
+import { Coins, Zap, Trophy, RefreshCw, Save, Trash2, Plus, X, Cpu } from 'lucide-react';
 import { modelsApi } from '../api/modelsApi';
 import { routingApi } from '../api/routingApi';
 import type {
@@ -13,12 +13,13 @@ import { CAPABILITIES, typicalCallCost } from '../types/routing';
 import { getErrorMessage } from '../lib/errors';
 import { PageHeader } from '../components/ui/PageHeader';
 import { MetricCard } from '../components/metrics/MetricCard';
+import { EmptyState, ErrorState, LoadingState, Notice } from '../components/ui/States';
+import { useConfirm } from '../components/ui/Dialog';
 
 const STAGE_TYPES = ['analysis', 'design', 'generation', 'testing', 'documentation', 'review', 'custom'];
 const PRIORITIES: PriorityFactor[] = ['balanced', 'quality', 'cost', 'speed'];
 
-const inputClass =
-  'px-2 py-1.5 bg-surface-800/50 border border-surface-700/50 rounded-lg text-xs text-white focus:outline-none focus:border-primary-500/50';
+const inputClass = 'input input-sm';
 
 interface RuleDraft {
   priority_factor: PriorityFactor;
@@ -70,6 +71,7 @@ export const ModelComparison: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [confirm, confirmDialog] = useConfirm();
 
   const loadData = useCallback(async () => {
     try {
@@ -122,8 +124,14 @@ export const ModelComparison: React.FC = () => {
       else await routingApi.createRule(stageType, payload);
     }, `Routing rule for ${stageType} saved`);
 
-  const deleteRule = (stageType: string) => {
-    if (!confirm(`Delete the routing rule for ${stageType}? Stages of this type will use balanced routing.`)) return;
+  const deleteRule = async (stageType: string) => {
+    const ok = await confirm({
+      title: `Delete the ${stageType} rule?`,
+      message: 'Stages of this type will use balanced routing with min score 0.70.',
+      confirmLabel: 'Delete rule',
+      destructive: true,
+    });
+    if (!ok) return;
     run(async () => { await routingApi.deleteRule(stageType); }, `Routing rule for ${stageType} deleted`);
   };
 
@@ -134,83 +142,83 @@ export const ModelComparison: React.FC = () => {
     allModels.find((m) => m.model_name === modelName)?.display_name || modelName || 'N/A';
 
   const models = comparison?.models || [];
+  // Disabled models are never routed to, so keep them out of the registry and rule pickers.
+  const availableModels = allModels.filter((m) => m.is_available);
 
   return (
     <div>
       <PageHeader
+        eyebrow="Insights"
         title="Models & Routing"
-        description="Which LLM each stage type is sent to, and why"
+        description="Which LLM each stage type is sent to, and why."
         actions={
-          <button onClick={() => loadData()} disabled={busy} className="btn btn-secondary">
+          <button onClick={() => loadData()} disabled={busy} className="btn btn-outline">
             <RefreshCw size={14} aria-hidden /> Refresh
           </button>
         }
       />
 
       {notice && (
-        <div role="status" className="mb-6 flex items-center justify-between glass rounded-lg px-4 py-3 text-sm">
-          <span>{notice}</span>
-          <button onClick={() => setNotice(null)} className="text-surface-200/50 hover:text-white" aria-label="Dismiss">
-            <XCircle size={16} />
-          </button>
-        </div>
+        <Notice tone={notice.startsWith('Failed') ? 'warning' : 'success'} className="mb-6" onDismiss={() => setNotice(null)}>
+          {notice}
+        </Notice>
       )}
 
-      {loading && <p className="text-sm text-surface-200/50">Loading models…</p>}
-      {error && <p role="alert" className="mb-6 text-sm text-red-400">Could not load models: {error}</p>}
+      {loading && <LoadingState label="Loading models…" />}
+      {error && <ErrorState className="mb-6" title="Could not load models" message={error} onRetry={() => loadData()} />}
 
       {comparison && (
         <>
           {/* Highlights */}
-          <div className="mb-8 grid grid-cols-1 gap-3 md:grid-cols-3">
-            <MetricCard icon={Coins} label="Most Cost-Effective" value={displayName(comparison.cheapest)} />
-            <MetricCard icon={Zap} label="Fastest" value={displayName(comparison.fastest)} />
-            <MetricCard icon={Trophy} label="Best for Code Generation" value={displayName(comparison.most_capable.generation)} />
+          <div className="mb-10 grid grid-cols-1 gap-3 sm:grid-cols-3">
+            <MetricCard compact icon={Coins} label="Most Cost-Effective" value={displayName(comparison.cheapest)} />
+            <MetricCard compact icon={Zap} label="Fastest" value={displayName(comparison.fastest)} />
+            <MetricCard compact icon={Trophy} label="Best for Code Generation" value={displayName(comparison.most_capable.generation)} />
           </div>
 
           {/* Models table */}
-          <h2 className="mb-3 text-lg font-semibold">Model Registry</h2>
-          <div className="glass rounded-xl overflow-x-auto mb-10">
-            <table className="w-full text-sm">
-              <thead className="text-surface-200/50 text-xs uppercase tracking-wide border-b border-surface-700/50">
+          <SectionTitle title="Model Registry" description="Capability scores per task, cost and latency for the models available for routing." />
+          <div className="card mb-12 overflow-x-auto">
+            <table className="data-table tabular">
+              <thead>
                 <tr>
-                  <th className="px-4 py-3 text-left">Model</th>
-                  <th className="px-4 py-3 text-left">Status</th>
-                  <th className="px-4 py-3 text-right">Context</th>
-                  <th className="px-4 py-3 text-right">Latency</th>
-                  <th className="px-4 py-3 text-right" title="1K input + 500 output tokens">Cost / call</th>
+                  <th className="sticky left-0 z-[1] bg-surface-tint">Model</th>
+                  <th>Status</th>
+                  <th className="!text-right">Context</th>
+                  <th className="!text-right">Latency</th>
+                  <th className="!text-right" title="1K input + 500 output tokens">Cost / call</th>
                   {CAPABILITIES.map((cap) => (
-                    <th key={cap} className="px-2 py-3 text-center">{cap}</th>
+                    <th key={cap} className="!px-2 !text-center">{cap}</th>
                   ))}
-                  <th className="px-4 py-3" />
+                  <th><span className="sr-only">Availability</span></th>
                 </tr>
               </thead>
               <tbody>
-                {allModels.map((model) => (
-                  <tr key={model.id} className={`border-b border-surface-700/30 ${model.is_available ? '' : 'opacity-50'}`}>
-                    <td className="px-4 py-3">
-                      <div className="font-medium">{model.display_name}</div>
-                      <div className="text-xs text-surface-200/40">{model.provider} · {model.model_name}</div>
+                {availableModels.map((model) => (
+                  <tr key={model.id}>
+                    <td className="sticky left-0 z-[1] min-w-[11rem] bg-surface">
+                      <div className="font-book text-ink">{model.display_name}</div>
+                      <div className="mt-0.5 text-xs text-ink-muted">{model.provider} · {model.model_name}</div>
                     </td>
-                    <td className="px-4 py-3">
+                    <td>
                       <ModelStatus model={model} />
                     </td>
-                    <td className="px-4 py-3 text-right">{Math.round(model.max_context_tokens / 1000)}K</td>
-                    <td className="px-4 py-3 text-right">{model.avg_latency_ms != null ? `${model.avg_latency_ms}ms` : 'N/A'}</td>
-                    <td className="px-4 py-3 text-right">${typicalCallCost(model).toFixed(4)}</td>
+                    <td className="text-right">{Math.round(model.max_context_tokens / 1000)}K</td>
+                    <td className="text-right">{model.avg_latency_ms != null ? `${model.avg_latency_ms}ms` : 'N/A'}</td>
+                    <td className="text-right">${typicalCallCost(model).toFixed(4)}</td>
                     {CAPABILITIES.map((cap) => (
-                      <td key={cap} className="px-2 py-3 text-center">
+                      <td key={cap} className="!px-2 text-center">
                         <CapabilityBadge
                           score={model.capabilities[cap]}
                           best={comparison.most_capable[cap] === model.model_name}
                         />
                       </td>
                     ))}
-                    <td className="px-4 py-3 text-right">
+                    <td className="text-right">
                       <button
                         onClick={() => toggleAvailability(model)}
                         disabled={busy}
-                        className="text-xs text-primary-400 hover:text-primary-300 disabled:opacity-50"
+                        className="btn btn-ghost btn-sm"
                       >
                         {model.is_available ? 'Disable' : 'Enable'}
                       </button>
@@ -222,25 +230,23 @@ export const ModelComparison: React.FC = () => {
           </div>
 
           {/* Routing rules */}
-          <h2 className="mb-1 text-lg font-semibold">Routing Rules</h2>
-          <p className="text-sm text-surface-200/50 mb-3">
-            Per stage type: candidates must meet the minimum score and limits; the priority picks among them.
-            A preferred model skips selection; the fallback is used when no candidate qualifies.
-            User overrides and stage model preferences always win.
-          </p>
-          <div className="glass rounded-xl overflow-x-auto mb-10">
-            <table className="w-full text-sm">
-              <thead className="text-surface-200/50 text-xs uppercase tracking-wide border-b border-surface-700/50">
+          <SectionTitle
+            title="Routing Rules"
+            description="Per stage type: candidates must meet the minimum score and limits; the priority picks among them. A preferred model skips selection; the fallback is used when no candidate qualifies. User overrides and stage model preferences always win."
+          />
+          <div className="card mb-12 overflow-x-auto">
+            <table className="data-table">
+              <thead>
                 <tr>
-                  <th className="px-3 py-3 text-left">Stage Type</th>
-                  <th className="px-3 py-3 text-center">Active</th>
-                  <th className="px-3 py-3 text-left">Priority</th>
-                  <th className="px-3 py-3 text-left">Min Score</th>
-                  <th className="px-3 py-3 text-left" title="USD for 1K input + 500 output tokens">Max $/call</th>
-                  <th className="px-3 py-3 text-left">Max Latency</th>
-                  <th className="px-3 py-3 text-left">Preferred</th>
-                  <th className="px-3 py-3 text-left">Fallback</th>
-                  <th className="px-3 py-3" />
+                  <th className="!px-3">Stage Type</th>
+                  <th className="!px-3 !text-center">Active</th>
+                  <th className="!px-3">Priority</th>
+                  <th className="!px-3">Min Score</th>
+                  <th className="!px-3" title="USD for 1K input + 500 output tokens">Max $/call</th>
+                  <th className="!px-3">Max Latency</th>
+                  <th className="!px-3">Preferred</th>
+                  <th className="!px-3">Fallback</th>
+                  <th className="!px-3"><span className="sr-only">Actions</span></th>
                 </tr>
               </thead>
               <tbody>
@@ -249,15 +255,15 @@ export const ModelComparison: React.FC = () => {
                   const draft = drafts[stageType];
                   if (!draft) {
                     return (
-                      <tr key={stageType} className="border-b border-surface-700/30">
-                        <td className="px-3 py-3 font-medium">{stageType}</td>
-                        <td colSpan={7} className="px-3 py-3 text-surface-200/40 text-xs">
+                      <tr key={stageType}>
+                        <td className="!px-3 font-book text-ink">{stageType}</td>
+                        <td colSpan={7} className="!px-3 text-xs text-ink-muted">
                           No rule: balanced routing with min score 0.70
                         </td>
-                        <td className="px-3 py-3 text-right">
+                        <td className="!px-3 text-right">
                           <button
                             onClick={() => updateDraft(stageType, {})}
-                            className="flex items-center gap-1 text-xs text-primary-400 hover:text-primary-300 ml-auto"
+                            className="btn btn-secondary btn-sm ml-auto"
                           >
                             <Plus size={12} /> Add rule
                           </button>
@@ -266,11 +272,13 @@ export const ModelComparison: React.FC = () => {
                     );
                   }
                   return (
-                    <tr key={stageType} className="border-b border-surface-700/30">
-                      <td className="px-3 py-3 font-medium">{stageType}</td>
-                      <td className="px-3 py-3 text-center">
+                    <tr key={stageType} className="bg-surface-tint/50">
+                      <td className="!px-3 font-book text-ink">{stageType}</td>
+                      <td className="!px-3 text-center">
                         <input
                           type="checkbox"
+                          role="switch"
+                          className="switch"
                           aria-label={`${stageType} rule active`}
                           checked={draft.is_active}
                           onChange={(e) => updateDraft(stageType, { is_active: e.target.checked })}
@@ -316,7 +324,7 @@ export const ModelComparison: React.FC = () => {
                       <td className="px-3 py-3">
                         <ModelIdSelect
                           label={`${stageType} preferred model`}
-                          models={allModels}
+                          models={availableModels}
                           value={draft.preferred_model_id}
                           onChange={(id) => updateDraft(stageType, { preferred_model_id: id })}
                         />
@@ -324,18 +332,19 @@ export const ModelComparison: React.FC = () => {
                       <td className="px-3 py-3">
                         <ModelIdSelect
                           label={`${stageType} fallback model`}
-                          models={allModels}
+                          models={availableModels}
                           value={draft.fallback_model_id}
                           onChange={(id) => updateDraft(stageType, { fallback_model_id: id })}
                         />
                       </td>
                       <td className="px-3 py-3">
-                        <div className="flex gap-2 justify-end">
+                        <div className="flex justify-end gap-1">
                           <button
                             onClick={() => saveRule(stageType)}
                             disabled={busy}
                             title="Save rule"
-                            className="text-primary-400 hover:text-primary-300 disabled:opacity-50"
+                            aria-label={`Save ${stageType} rule`}
+                            className="btn btn-secondary btn-icon btn-sm"
                           >
                             <Save size={14} />
                           </button>
@@ -344,7 +353,8 @@ export const ModelComparison: React.FC = () => {
                               onClick={() => deleteRule(stageType)}
                               disabled={busy}
                               title="Delete rule"
-                              className="text-surface-200/40 hover:text-red-400 disabled:opacity-50"
+                              aria-label={`Delete ${stageType} rule`}
+                              className="btn btn-ghost btn-icon btn-sm text-ink-faint hover:!text-danger"
                             >
                               <Trash2 size={14} />
                             </button>
@@ -352,9 +362,10 @@ export const ModelComparison: React.FC = () => {
                             <button
                               onClick={() => setDrafts(({ [stageType]: _, ...rest }) => rest)}
                               title="Discard"
-                              className="text-surface-200/40 hover:text-white"
+                              aria-label={`Discard ${stageType} rule`}
+                              className="btn btn-ghost btn-icon btn-sm"
                             >
-                              <XCircle size={14} />
+                              <X size={14} />
                             </button>
                           )}
                         </div>
@@ -367,34 +378,34 @@ export const ModelComparison: React.FC = () => {
           </div>
 
           {/* Recent decisions */}
-          <h2 className="mb-3 text-lg font-semibold">Recent Routing Decisions</h2>
-          <div className="glass rounded-xl overflow-x-auto">
+          <SectionTitle title="Recent Routing Decisions" description="The last 20 model selections and the reason for each." />
+          <div className="card overflow-x-auto">
             {decisions.length === 0 ? (
-              <p className="px-4 py-6 text-sm text-surface-200/40">No routing decisions yet. Execute a workflow to see them.</p>
+              <EmptyState className="m-3" compact icon={Cpu} title="No routing decisions yet." description="Execute a workflow to see them." />
             ) : (
-              <table className="w-full text-sm">
-                <thead className="text-surface-200/50 text-xs uppercase tracking-wide border-b border-surface-700/50">
+              <table className="data-table">
+                <thead>
                   <tr>
-                    <th className="px-4 py-3 text-left">When</th>
-                    <th className="px-4 py-3 text-left">Stage Type</th>
-                    <th className="px-4 py-3 text-left">Model</th>
-                    <th className="px-4 py-3 text-left">Reason</th>
+                    <th className="hidden md:table-cell">When</th>
+                    <th>Stage Type</th>
+                    <th>Model</th>
+                    <th>Reason</th>
                   </tr>
                 </thead>
                 <tbody>
                   {decisions.map((d) => (
-                    <tr key={d.id} className="border-b border-surface-700/30">
-                      <td className="px-4 py-3 text-surface-200/50 whitespace-nowrap">
+                    <tr key={d.id}>
+                      <td className="hidden whitespace-nowrap text-ink-muted md:table-cell">
                         {new Date(d.created_at).toLocaleString()}
                       </td>
-                      <td className="px-4 py-3">{d.stage_type || 'untyped'}</td>
-                      <td className="px-4 py-3">
-                        <span className="font-medium">{d.selected_model_name}</span>
-                        <span className="text-xs text-surface-200/40 ml-1">({d.selected_provider})</span>
-                        {d.was_user_override && <Tag className="bg-surface-700/50 text-surface-200/80">override</Tag>}
-                        {d.was_fallback && <Tag className="bg-amber-500/15 text-amber-300">fallback</Tag>}
+                      <td className="text-ink">{d.stage_type || 'untyped'}</td>
+                      <td className="min-w-[10rem]">
+                        <span className="font-book text-ink">{d.selected_model_name}</span>
+                        <span className="ml-1 text-xs text-ink-muted">({d.selected_provider})</span>
+                        {d.was_user_override && <Tag className="bg-[rgba(112,115,147,0.1)] text-ink-secondary">override</Tag>}
+                        {d.was_fallback && <Tag className="bg-warning-soft text-warning">fallback</Tag>}
                       </td>
-                      <td className="px-4 py-3 text-surface-200/60">{d.selection_reason}</td>
+                      <td className="min-w-[14rem] text-ink-secondary">{d.selection_reason}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -405,37 +416,48 @@ export const ModelComparison: React.FC = () => {
       )}
 
       {!loading && !error && models.length === 0 && (
-        <p className="text-surface-200/50">
-          No models registered. Run <code>alembic upgrade head</code> and restart the backend to seed the registry.
-        </p>
+        <EmptyState
+          className="mt-6"
+          icon={Cpu}
+          title="No models registered."
+          description={<>Run <code className="rounded-md bg-surface px-1.5 py-0.5 font-mono text-xs">alembic upgrade head</code> and restart the backend to seed the registry.</>}
+        />
       )}
+      {confirmDialog}
     </div>
   );
 };
 
+const SectionTitle: React.FC<{ title: string; description?: string }> = ({ title, description }) => (
+  <div className="mb-4">
+    <h2 className="text-[17px] font-medium text-ink">{title}</h2>
+    {description && <p className="mt-1 max-w-3xl text-[13px] leading-relaxed text-ink-muted">{description}</p>}
+  </div>
+);
+
 const ModelStatus: React.FC<{ model: ModelProfile }> = ({ model }) => {
-  if (!model.is_available) return <Tag className="bg-surface-700/50 text-surface-200/50">disabled</Tag>;
-  if (!model.routable) return <Tag className="bg-amber-500/15 text-amber-300">no API key</Tag>;
-  return <Tag className="bg-primary-500/15 text-primary-400">routable</Tag>;
+  if (!model.is_available) return <Tag className="bg-[rgba(112,115,147,0.1)] text-ink-muted">disabled</Tag>;
+  if (!model.routable) return <Tag className="bg-warning-soft text-warning">no API key</Tag>;
+  return <Tag className="bg-success-soft text-success">routable</Tag>;
 };
 
 const Tag: React.FC<{ className: string; children: React.ReactNode }> = ({ className, children }) => (
-  <span className={`text-xs px-2 py-0.5 rounded ml-1 first:ml-0 ${className}`}>{children}</span>
+  <span className={`ml-1 inline-flex whitespace-nowrap rounded-pill px-2 py-0.5 text-xs font-book first:ml-0 ${className}`}>{children}</span>
 );
 
 // Static class names so Tailwind keeps them
 const SCORE_CLASSES = {
-  high: 'bg-primary-500/15 text-primary-400',
-  mid: 'bg-surface-700/50 text-surface-200/80',
-  low: 'bg-surface-700/50 text-surface-200/50',
+  high: 'bg-primary/10 text-primary-700',
+  mid: 'bg-lavender text-ink-secondary',
+  low: 'bg-lavender-soft text-ink-muted',
 };
 
 const CapabilityBadge: React.FC<{ score?: number; best?: boolean }> = ({ score, best }) => {
-  if (score == null) return <span className="text-surface-200/30">–</span>;
+  if (score == null) return <span className="text-ink-faint">–</span>;
   const tier = score >= 0.9 ? 'high' : score >= 0.8 ? 'mid' : 'low';
   return (
     <span
-      className={`px-2 py-0.5 rounded text-xs font-medium ${SCORE_CLASSES[tier]} ${best ? 'ring-1 ring-primary-400' : ''}`}
+      className={`inline-flex rounded-pill px-2 py-0.5 text-xs font-book tabular ${SCORE_CLASSES[tier]} ${best ? 'ring-1 ring-primary' : ''}`}
       title={best ? 'Best in registry' : undefined}
     >
       {Math.round(score * 100)}%
