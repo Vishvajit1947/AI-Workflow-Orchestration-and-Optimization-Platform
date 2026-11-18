@@ -8,7 +8,7 @@ configured root directory with user isolation and security boundaries.
 from pathlib import Path
 from typing import Dict, Any, List, Optional
 
-import aiofiles.os
+from . import _aio as aiofiles
 
 from .exceptions import (
     WorkspaceError,

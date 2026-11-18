@@ -37,9 +37,27 @@ services:
       ENVIRONMENT: production
       # Same-origin behind nginx; add your public origin(s) if the UI is served elsewhere
       CORS_ORIGINS: ${CORS_ORIGINS:-["http://localhost"]}
+      WORKSPACE_ROOT: /var/projects
+      SANDBOX_RUNNER_URL: http://runner:8080
+      SANDBOX_RUNNER_TOKEN: ${SANDBOX_RUNNER_TOKEN:?Set SANDBOX_RUNNER_TOKEN in .env}
+    volumes:
+      - projects_data:/var/projects
     depends_on:
       postgres:
         condition: service_healthy
+
+  # Sandbox runner: the only service with Docker access; runs generated projects in
+  # throwaway, resource-limited containers. Not published on any port.
+  runner:
+    build:
+      context: ./runner
+    restart: unless-stopped
+    environment:
+      RUNNER_TOKEN: ${SANDBOX_RUNNER_TOKEN:?Set SANDBOX_RUNNER_TOKEN in .env}
+      PROJECTS_ROOT: /var/projects
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - projects_data:/var/projects:ro
 
   frontend:
     build:
@@ -59,3 +77,4 @@ services:
 
 volumes:
   postgres_data:
+  projects_data:

@@ -10,6 +10,7 @@ import { ExecutionConfigModal, type ExecutionConfig } from '../components/Execut
 import { ExecutionResults } from '../components/ExecutionResults';
 import { ExecutionMonitor } from '../components/ExecutionMonitor';
 import { DAGLegend, DAGVisualization } from '../components/DAGVisualization';
+import { ProjectPanel } from '../components/project/ProjectPanel';
 import type { Stage } from '../types';
 import type { ExecutionDetailResponse, WorkflowDAG } from '../types/execution';
 import { getErrorMessage } from '../lib/errors';
@@ -188,6 +189,13 @@ export default function WorkflowDetail() {
               <DAGLegend live={false} />
             </div>
           )}
+        </div>
+      )}
+
+      {/* Complete Project workflows: build status, logs, repairs, files, ZIP */}
+      {stages.some((s) => s.config?.kind === 'project_build') && (
+        <div className="mb-8">
+          <ProjectPanel workflowId={id} active={isExecuting} />
         </div>
       )}
 

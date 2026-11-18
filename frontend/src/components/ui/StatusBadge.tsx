@@ -15,6 +15,11 @@ export const STATUS_TONES: Record<string, string> = {
   skipped: 'bg-amber-500/15 text-amber-300',
   completed: 'bg-primary-500/15 text-primary-400',
   failed: 'bg-red-500/15 text-red-300',
+  // projects
+  initializing: NEUTRAL,
+  building: 'bg-blue-500/15 text-blue-300',
+  succeeded: 'bg-primary-500/15 text-primary-400',
+  unavailable: 'bg-amber-500/15 text-amber-300',
 };
 
 interface StatusBadgeProps {

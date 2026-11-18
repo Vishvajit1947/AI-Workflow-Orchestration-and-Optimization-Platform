@@ -89,6 +89,13 @@ class Settings(BaseSettings):
     MAX_FILES_PER_WORKSPACE: int = 1000
     ALLOWED_FILE_EXTENSIONS: str = ".py,.js,.ts,.tsx,.jsx,.json,.yaml,.yml,.md,.txt,.html,.css,.sh,.toml,.ini,.xml,.go,.rs,.rb,.csv,.sql"
 
+    # ---------- Project Builder sandbox ----------
+    # The runner service that executes generated projects in isolated containers.
+    # Empty URL = no sandbox: builds are reported as "unavailable", never as succeeded.
+    SANDBOX_RUNNER_URL: str = ""
+    SANDBOX_RUNNER_TOKEN: str = ""
+    PROJECT_MAX_REPAIR_ATTEMPTS: int = 3
+
 
 # Singleton instance — import this everywhere
 settings = Settings()

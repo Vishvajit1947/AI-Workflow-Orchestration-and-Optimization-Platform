@@ -60,6 +60,9 @@ class RecordingSleep:
 
 @pytest.mark.parametrize("error, expected", [
     (HTTPError(429), RATE_LIMIT),
+    # One request bigger than the per-minute budget (e.g. Groq OTPM): waiting never helps
+    (HTTPError(429, "Request too large for model `qwen` on output tokens per minute (OTPM): Limit 1000, Requested 1854"),
+     PERMANENT),
     (HTTPError(500), TRANSIENT),
     (HTTPError(503), TRANSIENT),
     (HTTPError(408), TRANSIENT),

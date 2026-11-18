@@ -15,7 +15,9 @@ COPY requirements.txt /app/backend/requirements.txt
 RUN pip install --upgrade pip && pip install -r /app/backend/requirements.txt
 
 COPY . /app/backend
-RUN useradd --create-home appuser && chown -R appuser /app
+# /var/projects: project workspaces volume (a new named volume takes this ownership)
+RUN useradd --create-home appuser && chown -R appuser /app \
+    && mkdir -p /var/projects && chown appuser /var/projects
 USER appuser
 
 EXPOSE 8000

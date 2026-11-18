@@ -10,6 +10,9 @@ from pydantic import BaseModel, Field, field_validator
 from backend.app.artifacts.schemas import OutputMode
 
 
+PlannerMode = Literal["artifact", "project"]
+
+
 class ObjectiveAnalysisRequest(BaseModel):
     """Request to analyze a user's objective."""
     objective: str = Field(
@@ -18,6 +21,11 @@ class ObjectiveAnalysisRequest(BaseModel):
         max_length=5000,
         examples=["Design a machine learning pipeline for retail demand forecasting."],
         description="The user's high-level objective or goal",
+    )
+    mode: PlannerMode = Field(
+        default="artifact",
+        description="artifact: documents/code artifacts (existing behaviour); project: a complete, "
+                    "runnable project that is built, tested and repaired in a sandbox",
     )
 
 
@@ -131,5 +139,9 @@ class WorkflowGenerationRequest(BaseModel):
     auto_execute: bool = Field(
         default=False,
         description="Whether to immediately execute after creation",
+    )
+    mode: PlannerMode = Field(
+        default="artifact",
+        description="project adds a final build-and-verify stage after the file-generating stages",
     )
 

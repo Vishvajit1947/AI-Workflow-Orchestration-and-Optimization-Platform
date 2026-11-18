@@ -14,6 +14,7 @@ import Dashboard from './pages/Dashboard';
 import CacheDashboard from './pages/CacheDashboard';
 import ModelComparison from './pages/ModelComparison';
 import ExecutionsPage from './pages/ExecutionsPage';
+import ProjectsPage from './pages/ProjectsPage';
 
 function App() {
   return (
@@ -38,6 +39,7 @@ function App() {
               <Route path="cache" element={<CacheDashboard />} />
               <Route path="models" element={<ModelComparison />} />
               <Route path="executions" element={<ExecutionsPage />} />
+              <Route path="projects" element={<ProjectsPage />} />
             </Route>
           </Route>
         </Routes>

@@ -12,8 +12,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
-import aiofiles
-import aiofiles.os
+from . import _aio as aiofiles
 
 from .exceptions import FileOperationError, WorkspaceQuotaExceededError
 

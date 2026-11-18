@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Outlet, NavLink, useLocation } from 'react-router-dom';
 import {
-  Sparkles, LayoutDashboard, GitBranch, Database, Zap, Cpu, LogOut, Menu, X, Network,
+  Sparkles, LayoutDashboard, GitBranch, Database, Zap, Cpu, LogOut, Menu, X, Network, Boxes,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
@@ -20,6 +20,7 @@ const NAV_SECTIONS: { title: string; items: NavItem[] }[] = [
       { to: '/', icon: Sparkles, label: 'New Workflow', end: true },
       { to: '/workflows', icon: GitBranch, label: 'Workflows' },
       { to: '/executions', icon: Zap, label: 'Executions' },
+      { to: '/projects', icon: Boxes, label: 'Projects' },
     ],
   },
   {

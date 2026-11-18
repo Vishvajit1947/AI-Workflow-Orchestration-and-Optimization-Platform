@@ -66,6 +66,34 @@ SCHEMA (respond with ONLY valid JSON matching this schema):
 CRITICAL: Return ONLY valid JSON. No markdown formatting, no code fences, no commentary outside the JSON."""
 
 
+
+# Appended to the user prompt in "Complete Project" mode
+PROJECT_MODE_GUIDANCE = """
+
+PROJECT MODE: the user wants a complete, RUNNABLE software project, which will be installed,
+built and tested automatically after generation.
+- Classify as "complex". Plan 3-5 stages: first requirements/design (output_mode "explanation"),
+  then implementation stages with output_mode "project" that write the actual files. Give each
+  component its own folder (e.g. backend/, frontend/) and one implementation stage per component.
+- Implementation instructions must require: a dependency manifest per component (requirements.txt
+  with pinned versions, or package.json with "build" and "test" scripts), a root README.md with
+  setup and run steps, a .gitignore, .env.example when configuration is needed, and a few small
+  tests that run without external services (no real database or network in tests).
+- Each answer has a limited output length: keep every implementation stage small (at most about
+  8 short files, concise code, no long comments); split a large component into several stages
+  (e.g. backend core, backend routes, frontend pages) rather than one huge stage.
+- Use the "testing" stage_type only for stages that write test files (output_mode "project")."""
+
+
+def ensure_project_output(plan: ObjectiveAnalysisResponse) -> ObjectiveAnalysisResponse:
+    """Project mode needs at least one file-writing stage; if the model planned none, make the
+    last implementation stage (generation, else the last stage) write the project."""
+    if any(s.output_mode in ("project", "code") for s in plan.stages):
+        return plan
+    target = next((s for s in reversed(plan.stages) if s.stage_type == "generation"), plan.stages[-1])
+    stages = [s.model_copy(update={"output_mode": "project"}) if s is target else s for s in plan.stages]
+    return plan.model_copy(update={"stages": stages})
+
 class WorkflowPlannerError(Exception):
     """Base exception for planner errors."""
     pass
@@ -124,7 +152,7 @@ class WorkflowPlanner:
         
         return registry.get(available[0])
 
-    async def analyze_objective(self, objective: str) -> ObjectiveAnalysisResponse:
+    async def analyze_objective(self, objective: str, mode: str = "artifact") -> ObjectiveAnalysisResponse:
         """
         Analyze a user's objective and generate a workflow plan.
         
@@ -150,6 +178,8 @@ Remember:
 - Keep all fields compact and concise (1-2 sentences each) so output fits within 800 tokens.
 - For complex objectives, create 3-5 logical stages.
 - Respond with ONLY valid raw JSON (no markdown formatting, no code blocks)."""
+        if mode == "project":
+            user_prompt += PROJECT_MODE_GUIDANCE
 
         # Call LLM
         try:
@@ -186,6 +216,9 @@ Remember:
             raise PlannerValidationError(
                 f"LLM response did not match expected schema: {str(e)}\nResponse: {plan_dict}"
             ) from e
+
+        if mode == "project":
+            plan = ensure_project_output(plan)
 
         # Additional validation
         self._validate_plan(plan)

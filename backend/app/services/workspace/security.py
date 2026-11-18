@@ -9,7 +9,7 @@ Path validation, sanitization, and boundary enforcement to prevent:
 """
 
 import os
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Optional
 
 from .exceptions import WorkspaceSecurityError
@@ -138,35 +138,25 @@ class WorkspaceSecurity:
         Raises:
             WorkspaceSecurityError: If root is invalid or dangerous
         """
+        # System locations, compared as POSIX paths so the check behaves the same on every
+        # OS. "/" itself is rejected, but not everything under it (that is every path).
+        posix = PurePosixPath(root.as_posix())
+        if posix == PurePosixPath("/"):
+            raise WorkspaceSecurityError(f"Workspace root cannot be a system directory: {root}")
+        for danger in ("/etc", "/usr", "/bin", "/sbin", "/boot", "/sys", "/proc", "/dev"):
+            if posix == PurePosixPath(danger) or PurePosixPath(danger) in posix.parents:
+                raise WorkspaceSecurityError(f"Workspace root cannot be in system directory: {root}")
+
         if not root.is_absolute():
             raise WorkspaceSecurityError(
                 f"Workspace root must be absolute: {root}"
             )
 
-        # Resolve symlinks
-        resolved = root.resolve()
-
-        # Check if it's trying to be a system directory
-        dangerous_roots = {
-            Path("/"),
-            Path("/etc"),
-            Path("/usr"),
-            Path("/bin"),
-            Path("/sbin"),
-            Path("/boot"),
-            Path("/sys"),
-            Path("/proc"),
-            Path("/dev"),
-        }
-
-        for danger in dangerous_roots:
-            try:
-                resolved.relative_to(danger)
-                raise WorkspaceSecurityError(
-                    f"Workspace root cannot be in system directory: {root}"
-                )
-            except ValueError:
-                pass  # Not in dangerous location, continue checking
+        # Repeat the check after resolving symlinks (e.g. a link that points into /etc)
+        resolved = PurePosixPath(root.resolve().as_posix())
+        for danger in ("/etc", "/usr", "/bin", "/sbin", "/boot", "/sys", "/proc", "/dev"):
+            if resolved == PurePosixPath(danger) or PurePosixPath(danger) in resolved.parents:
+                raise WorkspaceSecurityError(f"Workspace root cannot be in system directory: {root}")
 
     @staticmethod
     def sanitize_filename(filename: str, max_length: int = 255) -> str:

@@ -128,8 +128,11 @@ class TestResolveWorkspacePath:
         link_path = tmp_path / "escape_link"
         target_path = tmp_path.parent / "outside.txt"
         target_path.write_text("outside workspace")
-        
-        link_path.symlink_to(target_path)
+
+        try:
+            link_path.symlink_to(target_path)
+        except OSError as e:  # e.g. Windows without the symlink privilege
+            pytest.skip(f"Cannot create symlinks here: {e}")
 
         # Attempting to resolve the symlink should fail boundary check
         with pytest.raises(WorkspaceSecurityError, match="escapes workspace boundary"):

@@ -23,6 +23,7 @@ from backend.app.api.routing import router as routing_router
 from backend.app.api.analytics import router as analytics_router
 from backend.app.api.planner import router as planner_router
 from backend.app.api.artifacts import router as artifacts_router
+from backend.app.api.projects import router as projects_router
 
 PROTECTED_ROUTERS = (
     workflow_router,
@@ -34,6 +35,7 @@ PROTECTED_ROUTERS = (
     analytics_router,
     planner_router,
     artifacts_router,
+    projects_router,
 )
 
 api_router = APIRouter(prefix="/api")

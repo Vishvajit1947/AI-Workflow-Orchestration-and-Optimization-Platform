@@ -3,18 +3,29 @@
  */
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Sparkles, Loader2 } from 'lucide-react';
-import { plannerApi, type ObjectiveAnalysisResponse } from '../api/plannerApi';
+import { Sparkles, Loader2, FileText, Boxes } from 'lucide-react';
+import { plannerApi, type ObjectiveAnalysisResponse, type PlannerMode } from '../api/plannerApi';
 import PlanReview from '../components/PlanReview';
 import { getErrorMessage } from '../lib/errors';
 
 const MAX_OBJECTIVE_LENGTH = 5000; // matches the planner API limit
 
+const MODES: { value: PlannerMode; label: string; icon: typeof FileText; hint: string }[] = [
+  {
+    value: 'artifact', label: 'Individual artifact', icon: FileText,
+    hint: 'Documents, explanations or code files you can review and download.',
+  },
+  {
+    value: 'project', label: 'Complete project', icon: Boxes,
+    hint: 'A multi-file project that is installed, built and tested in an isolated sandbox, with automatic fixes.',
+  },
+];
+
 const EXAMPLE_OBJECTIVES = [
+  'Build a student management system using React, FastAPI and PostgreSQL.',
   'Design a machine learning pipeline for retail demand forecasting.',
   'Build a REST API for a task management application with authentication.',
   'Create a documentation system for an open-source project.',
-  'Develop a data processing workflow for customer analytics.',
 ];
 
 export default function ObjectiveInput() {
@@ -23,6 +34,7 @@ export default function ObjectiveInput() {
   const [analyzing, setAnalyzing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [plan, setPlan] = useState<ObjectiveAnalysisResponse | null>(null);
+  const [mode, setMode] = useState<PlannerMode>('artifact');
 
   const handleAnalyze = async () => {
     if (!objective.trim()) {
@@ -32,7 +44,7 @@ export default function ObjectiveInput() {
     setAnalyzing(true);
     setError(null);
     try {
-      setPlan(await plannerApi.analyzeObjective(objective.trim()));
+      setPlan(await plannerApi.analyzeObjective(objective.trim(), mode));
     } catch (err: unknown) {
       setError(getErrorMessage(err, 'Failed to analyze the objective. Check the LLM provider configuration and try again.'));
     } finally {
@@ -45,6 +57,7 @@ export default function ObjectiveInput() {
       <PlanReview
         objective={objective}
         plan={plan}
+        mode={mode}
         onApproved={(workflowId) => navigate(`/workflows/${workflowId}`)}
         onBack={() => setPlan(null)}
       />
@@ -61,6 +74,28 @@ export default function ObjectiveInput() {
       </div>
 
       <div className="glass rounded-xl p-5 sm:p-6">
+        <fieldset className="mb-5">
+          <legend className="mb-2 block text-sm font-medium text-surface-200/80">What should the AI produce?</legend>
+          <div className="grid gap-2 sm:grid-cols-2" role="radiogroup">
+            {MODES.map(({ value, label, icon: Icon, hint }) => (
+              <label
+                key={value}
+                className={`flex cursor-pointer gap-3 rounded-lg border p-3 transition-colors focus-within:ring-2 focus-within:ring-primary-400/60 ${
+                  mode === value ? 'border-primary-500/60 bg-primary-500/10' : 'border-surface-700/60 hover:border-surface-700'
+                }`}
+              >
+                <input type="radio" name="mode" value={value} checked={mode === value}
+                  onChange={() => setMode(value)} disabled={analyzing} className="sr-only" />
+                <Icon size={18} className={mode === value ? 'mt-0.5 text-primary-400' : 'mt-0.5 text-surface-200/50'} aria-hidden />
+                <span>
+                  <span className="block text-sm font-medium text-white">{label}</span>
+                  <span className="mt-0.5 block text-xs text-surface-200/50">{hint}</span>
+                </span>
+              </label>
+            ))}
+          </div>
+        </fieldset>
+
         <label htmlFor="objective" className="mb-2 block text-sm font-medium text-surface-200/80">
           Objective
         </label>

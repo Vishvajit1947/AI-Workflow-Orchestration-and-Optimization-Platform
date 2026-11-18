@@ -37,6 +37,10 @@ from backend.app.services.execution.error_handler import (
 from backend.app.services.execution.tracker import ExecutionControl, tracker
 from backend.app.services.llm import registry
 from backend.app.services.llm.base import LLMResponse
+from backend.app.services.project_builder.sandbox import default_sandbox
+from backend.app.services.project_builder.service import ProjectBuildService, summarize
+from backend.app.services.project_builder.stage import collect_project_files, is_project_build_stage
+from backend.app.services.project_builder.workspace import ProjectWorkspaceService
 from backend.app.services.router.routing_engine import RoutingEngine
 
 SYSTEM_PROMPT = ("You are an AI assistant helping with a multi-stage workflow. "
@@ -247,6 +251,9 @@ class ExecutionEngine:
         started_at = datetime.now(timezone.utc)
         await tracker.update_stage(run.execution_id, stage.id, status="running")
 
+        if is_project_build_stage(stage):
+            return await self._run_project_build(run, stage, started_at)
+
         # --- prepare: context, embedding, cache, routing ---
         try:
             async with self._db_lock:
@@ -329,6 +336,104 @@ class ExecutionEngine:
                                    provider=response.provider, model=response.model)
         return "completed"
 
+    async def _run_project_build(self, run: _Run, stage: Stage, started_at: datetime) -> str:
+        """
+        Run a project_build stage: write the upstream stages' files to the owner's project
+        workspace, build/test them in the sandbox and repair failures with the stage's
+        routed model. Never cached. "completed" only if the project really built.
+        """
+        try:
+            async with self._db_lock:
+                stage.status = "running"
+                await self.db.flush()
+                if run.workflow.user_id is None:
+                    raise ValueError("The workflow has no owner, so it has no project workspace")
+                files, extraction_warnings = await collect_project_files(self.db, run.execution_id, stage)
+                if not files:
+                    raise ValueError("The upstream stages did not generate any project files")
+                provider_name, model, routing_info = await self._select_model(run, stage)
+                workspace = ProjectWorkspaceService(self.db, run.workflow.user_id)
+                project = await workspace.project_for_workflow(run.workflow_id, run.workflow.name,
+                                                               run.workflow.objective)
+        except Exception as e:
+            async with self._db_lock:
+                await self._record_failure(run.workflow_id, run.execution_id, stage,
+                                           f"Project build could not start: {e}", started_at)
+                await self._commit_if(run)
+            await tracker.update_stage(run.execution_id, stage.id, status="failed", error=str(e))
+            return "failed"
+
+        await tracker.update_stage(run.execution_id, stage.id, provider=provider_name, model=model,
+                                   detail="Writing project files")
+
+        usage = {"input": 0, "output": 0, "cost": 0.0, "latency": 0}
+
+        async def repair_llm(prompt: str, system: str) -> tuple[str, Optional[str]]:
+            # Same path as an LLM stage: retries, circuit breaker and (with routing) a fallback model
+            response, _, _ = await self._call_llm(run, stage, prompt, provider_name, model, system_prompt=system)
+            usage["input"] += response.input_tokens or 0
+            usage["output"] += response.output_tokens or 0
+            usage["cost"] += float(response.estimated_cost or 0)
+            usage["latency"] += response.latency_ms or 0
+            return response.content, response.model
+
+        async def progress(text: str) -> None:
+            await tracker.update_stage(run.execution_id, stage.id, detail=text)
+
+        async def commit() -> None:  # called with the lock held
+            await self._commit_if(run)
+
+        builder = ProjectBuildService(
+            workspace, default_sandbox(), repair_llm, lock=self._db_lock, commit=commit,
+            progress=progress, is_cancelled=lambda: run.control.cancelled,
+        )
+        if run.control.cancelled:
+            return await self._finish_cancelled(run, stage, started_at)
+        task = asyncio.create_task(builder.build(project, files, run.execution_id, warnings=extraction_warnings))
+        run.llm_tasks[stage.id] = task  # cancelling the execution cancels the build (and its sandbox)
+        try:
+            build = await task
+        except asyncio.CancelledError:
+            if task.cancelled() and run.control.cancelled:
+                return await self._finish_cancelled(run, stage, started_at)
+            raise
+        except Exception as e:
+            async with self._db_lock:
+                await self._record_failure(run.workflow_id, run.execution_id, stage,
+                                           f"Project build failed: {e}", started_at)
+                await self._commit_if(run)
+            await tracker.update_stage(run.execution_id, stage.id, status="failed", error=str(e))
+            return "failed"
+        finally:
+            run.llm_tasks.pop(stage.id, None)
+
+        if build.status == "cancelled":
+            return await self._finish_cancelled(run, stage, started_at)
+        succeeded = build.status == "succeeded"
+        summary = summarize(build, project)
+        async with self._db_lock:
+            await self.context_mgr.add_context(run.workflow_id, run.execution_id, stage.id,
+                                               content=summary, context_type="stage_output")
+            self.db.add(ExecutionRecord(
+                workflow_id=run.workflow_id, stage_id=stage.id, execution_id=run.execution_id,
+                model_used=model, provider=provider_name,
+                input_tokens=usage["input"], output_tokens=usage["output"],  # repair calls only
+                estimated_cost=usage["cost"], latency_ms=usage["latency"] or None,
+                status="completed" if succeeded else "failed", result=summary,
+                error_message=None if succeeded else (build.error_summary or build.status)[:4000],
+                cache_hit=False, started_at=started_at, completed_at=datetime.now(timezone.utc),
+                metadata_={k: v for k, v in {
+                    "routing": routing_info,
+                    "project_build": {"project_id": str(project.id), "run_id": str(build.id), "status": build.status},
+                }.items() if v},
+            ))
+            stage.status = "completed" if succeeded else "failed"
+            await self.db.flush()
+            await self._commit_if(run)
+        await tracker.update_stage(run.execution_id, stage.id, status="completed" if succeeded else "failed",
+                                   detail=None, error=None if succeeded else f"Project {build.status}")
+        return "completed" if succeeded else "failed"
+
     async def _embed(self, stage: Stage, stage_input: str) -> Optional[list[float]]:
         """Embedding of the stage input, shared by cache lookup and store; None if unavailable."""
         try:
@@ -352,6 +457,10 @@ class ExecutionEngine:
                 return cache_result
 
         print(f"[CACHE MISS] Stage {stage.name} - Executing with LLM")
+        return await self._select_model(run, stage)
+
+    async def _select_model(self, run: _Run, stage: Stage) -> tuple[str, Optional[str], Optional[dict]]:
+        """(provider, model, routing_info) for a stage: routed, or the stage/run defaults. Lock must be held."""
         user_override = run.routing_preferences.get(str(stage.id))
         if run.use_routing:
             provider_name, model, routing_info = await self._route(
@@ -364,7 +473,8 @@ class ExecutionEngine:
         return provider_name, model, routing_info
 
     async def _call_llm(self, run: _Run, stage: Stage, stage_input: str, provider_name: str,
-                        model: Optional[str]) -> tuple[LLMResponse, list[dict], Optional[dict]]:
+                        model: Optional[str], system_prompt: Optional[str] = None
+                        ) -> tuple[LLMResponse, list[dict], Optional[dict]]:
         """
         Call the chosen model with retries; if it fails (or its circuit is open) and routing
         is on, ask the router for one fallback model. Returns (response, failed_attempts, fallback_info).
@@ -372,7 +482,8 @@ class ExecutionEngine:
         try:
             provider = registry.get(provider_name)
             model = model or provider.get_default_model()
-            response, attempts = await self.error_handler.call(provider, stage_input, model, _system_prompt(stage))
+            response, attempts = await self.error_handler.call(provider, stage_input, model,
+                                                               system_prompt or _system_prompt(stage))
             return response, attempts, None
         except (LLMCallFailed, CircuitOpenError, ValueError) as e:
             attempts = list(getattr(e, "attempts", []))
@@ -393,7 +504,8 @@ class ExecutionEngine:
         await tracker.update_stage(run.execution_id, stage.id, provider=fallback.provider, model=fallback.model_name)
         try:
             response, more = await self.error_handler.call(
-                registry.get(fallback.provider), stage_input, fallback.model_name, _system_prompt(stage)
+                registry.get(fallback.provider), stage_input, fallback.model_name,
+                system_prompt or _system_prompt(stage)
             )
         except (LLMCallFailed, CircuitOpenError) as e:
             raise StageFailed(f"{failure}; fallback also failed: {e}",

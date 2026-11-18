@@ -3,18 +3,19 @@
  * dependencies, and approval (which creates the workflow).
  */
 import { useState } from 'react';
-import { ArrowLeft, Check, Loader2, AlertCircle } from 'lucide-react';
-import { plannerApi, type ObjectiveAnalysisResponse, type StagePlan } from '../api/plannerApi';
+import { ArrowLeft, Check, Loader2, AlertCircle, Boxes } from 'lucide-react';
+import { plannerApi, type ObjectiveAnalysisResponse, type PlannerMode, type StagePlan } from '../api/plannerApi';
 import { getErrorMessage } from '../lib/errors';
 
 interface PlanReviewProps {
   objective: string;
   plan: ObjectiveAnalysisResponse;
+  mode?: PlannerMode;
   onApproved: (workflowId: string) => void;
   onBack: () => void;
 }
 
-export default function PlanReview({ objective, plan, onApproved, onBack }: PlanReviewProps) {
+export default function PlanReview({ objective, plan, mode = 'artifact', onApproved, onBack }: PlanReviewProps) {
   const [approving, setApproving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -22,7 +23,7 @@ export default function PlanReview({ objective, plan, onApproved, onBack }: Plan
     setApproving(true);
     setError(null);
     try {
-      const workflow = await plannerApi.generateWorkflow({ objective, plan, auto_execute: false });
+      const workflow = await plannerApi.generateWorkflow({ objective, plan, auto_execute: false, mode });
       onApproved(workflow.id);
     } catch (err: unknown) {
       setError(getErrorMessage(err, 'Failed to create the workflow. Check the plan and try again.'));
@@ -98,6 +99,19 @@ export default function PlanReview({ objective, plan, onApproved, onBack }: Plan
       <section className="glass mb-6 rounded-xl p-5" aria-label="Proposed stages">
         <h2 className="mb-4 text-lg font-semibold">Stages ({plan.stages.length})</h2>
         {(roots.length > 0 ? roots : plan.stages).map(renderStage)}
+        {mode === 'project' && (
+          <div className="mt-2 flex items-start gap-3 rounded-lg border border-primary-500/30 bg-primary-500/5 p-4">
+            <Boxes size={18} className="mt-0.5 shrink-0 text-primary-400" aria-hidden />
+            <div>
+              <h3 className="font-medium text-white">Build &amp; verify project</h3>
+              <p className="mt-1 text-sm text-surface-200/70">
+                Added automatically after the file-writing stages: installs dependencies, builds and tests the project
+                in an isolated sandbox, and lets the AI fix errors (up to 3 attempts). The result is reported as it is,
+                including failures.
+              </p>
+            </div>
+          </div>
+        )}
         <p className="mt-4 text-xs text-surface-200/40">
           You can add, remove, reorder and assign models to stages on the workflow page after creating it.
         </p>

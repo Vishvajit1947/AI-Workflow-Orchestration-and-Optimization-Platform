@@ -32,7 +32,8 @@ def classify_error(error: Exception) -> str:
     code = _status_code(error)
     if code is not None:
         if code == 429:
-            return RATE_LIMIT
+            # A single request larger than the per-minute budget never fits, however long we wait
+            return PERMANENT if "request too large" in str(error).lower() else RATE_LIMIT
         if code in (408, 409) or code >= 500:
             return TRANSIENT
         if 400 <= code < 500:

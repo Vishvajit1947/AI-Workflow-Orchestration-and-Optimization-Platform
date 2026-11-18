@@ -6,8 +6,12 @@
 
 import api from '../lib/api';
 
+/** artifact: documents and code artifacts; project: a runnable project that is built, tested and repaired. */
+export type PlannerMode = 'artifact' | 'project';
+
 export interface ObjectiveAnalysisRequest {
   objective: string;
+  mode?: PlannerMode;
 }
 
 export interface StagePlan {
@@ -33,6 +37,7 @@ export interface WorkflowGenerationRequest {
   objective: string;
   plan: ObjectiveAnalysisResponse;
   auto_execute?: boolean;
+  mode?: PlannerMode;
 }
 
 export const plannerApi = {
@@ -41,6 +46,7 @@ export const plannerApi = {
    */
   analyzeObjective: async (
     objective: string,
+    mode: PlannerMode = 'artifact',
     provider?: string,
     model?: string
   ): Promise<ObjectiveAnalysisResponse> => {
@@ -50,7 +56,7 @@ export const plannerApi = {
 
     const { data } = await api.post<ObjectiveAnalysisResponse>(
       '/planner/analyze',
-      { objective },
+      { objective, mode },
       { params }
     );
     return data;

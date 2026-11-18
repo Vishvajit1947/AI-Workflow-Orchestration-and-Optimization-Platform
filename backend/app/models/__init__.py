@@ -14,11 +14,11 @@ from backend.app.models.execution import ExecutionRecord
 from backend.app.models.cache import CacheEntry
 from backend.app.models.model_profile import ModelProfile
 from backend.app.models.routing_rule import RoutingRule, RoutingDecision
-from backend.app.models.project import Project, ProjectWorkspace, ProjectFile
+from backend.app.models.project import Project, ProjectWorkspace, ProjectFile, ProjectRun
 
 __all__ = [
     "User", "Session", "PasswordResetToken", "EmailVerificationToken",
     "Workflow", "Stage", "StageDependency", "WorkflowContext", "ExecutionRecord", 
     "CacheEntry", "ModelProfile", "RoutingRule", "RoutingDecision",
-    "Project", "ProjectWorkspace", "ProjectFile"
+    "Project", "ProjectWorkspace", "ProjectFile", "ProjectRun"
 ]

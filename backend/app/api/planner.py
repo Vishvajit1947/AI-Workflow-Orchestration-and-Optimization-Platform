@@ -11,6 +11,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.app.database import get_db
+from backend.app.services.project_builder.stage import PROJECT_BUILD_KIND
 from backend.app.core.dependencies import get_current_active_user
 from backend.app.models.user import User
 from backend.app.schemas.planner import (
@@ -52,7 +53,7 @@ async def analyze_objective(
     planner = WorkflowPlanner(db, provider_name=provider, model=model)
     
     try:
-        plan = await planner.analyze_objective(request.objective)
+        plan = await planner.analyze_objective(request.objective, mode=request.mode)
         return plan
     except PlannerLLMError as e:
         raise HTTPException(
@@ -155,6 +156,26 @@ async def generate_workflow_from_plan(
                     ),
                 )
     
+    # Complete Project mode: a final stage builds, tests and repairs the generated files
+    if request.mode == "project":
+        file_stages = [stage_id_map[s.id] for s in plan.stages if s.output_mode in ("project", "code")]
+        if not file_stages:
+            await workflow_mgr.delete_workflow(workflow.id)
+            raise HTTPException(status_code=422,
+                                detail="A project plan needs at least one stage that writes project files.")
+        await stage_mgr.create_stage(StageCreate(
+            workflow_id=workflow.id,
+            name="Build & verify project",
+            instruction="Install dependencies, build and test the generated project in an isolated "
+                        "sandbox, and repair errors automatically.",
+            stage_order=len(plan.stages),
+            stage_type="generation",  # repair calls are routed like code generation
+            config={"kind": PROJECT_BUILD_KIND,
+                    "description": "Builds and tests the project; repairs failures (bounded attempts)."},
+            dependencies=[StageDependencyCreate(depends_on_stage_id=sid, dependency_type="sequential")
+                          for sid in file_stages],
+        ))
+
     # Validate the resulting workflow
     from backend.app.utils.validators import validate_workflow
     errors = await validate_workflow(db, workflow.id)

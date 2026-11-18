@@ -45,6 +45,9 @@ class WorkflowManager:
             select(Workflow)
             .options(selectinload(Workflow.stages))
             .where(Workflow.id == workflow_id, Workflow.user_id == self.owner_id)
+            # Refresh an already-loaded workflow: stages created in this session since it was
+            # loaded would otherwise be missing from workflow.stages
+            .execution_options(populate_existing=True)
         )
         result = await self.db.execute(stmt)
         workflow = result.scalar_one_or_none()

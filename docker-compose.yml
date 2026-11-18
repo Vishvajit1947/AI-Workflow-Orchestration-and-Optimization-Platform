@@ -78,6 +78,9 @@ services:
       - EMBEDDING_PROVIDER=${EMBEDDING_PROVIDER:-local}
       - ENVIRONMENT=${ENVIRONMENT:-development}
       - LOG_LEVEL=${LOG_LEVEL:-info}
+      - WORKSPACE_ROOT=/var/projects
+      - SANDBOX_RUNNER_URL=http://runner:8080
+      - SANDBOX_RUNNER_TOKEN=${SANDBOX_RUNNER_TOKEN:-dev-runner-token-change-me}
     depends_on:
       postgres:
         condition: service_healthy
@@ -86,6 +89,23 @@ services:
     volumes:
       - ./backend:/app/backend
       - ./.env:/app/.env
+      - projects_data:/var/projects
+
+  # ---------------------------------------------------------------------------
+  # Sandbox runner — the only service with Docker access. Runs generated projects
+  # in throwaway, resource-limited containers. Not published on any host port.
+  # ---------------------------------------------------------------------------
+  runner:
+    build:
+      context: ./runner
+    container_name: ai_orchestrator_runner
+    restart: unless-stopped
+    environment:
+      - RUNNER_TOKEN=${SANDBOX_RUNNER_TOKEN:-dev-runner-token-change-me}
+      - PROJECTS_ROOT=/var/projects
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - projects_data:/var/projects:ro
 
   # ---------------------------------------------------------------------------
   # React + Vite Frontend
@@ -109,3 +129,4 @@ services:
 volumes:
   postgres_data:
   redis_data:
+  projects_data:
